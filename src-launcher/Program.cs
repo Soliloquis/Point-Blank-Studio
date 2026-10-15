@@ -16,6 +16,24 @@ namespace PointBlankLauncher
         private static string appDir = "";
         private static Mutex singleInstanceMutex = null;
 
+        private static readonly object logLock = new object();
+        private static void Log(string msg)
+        {
+            try
+            {
+                lock (logLock)
+                {
+                    string logFile = Path.Combine(appDir, "launcher.log");
+                    using (FileStream fs = new FileStream(logFile, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+                    using (StreamWriter sw = new StreamWriter(fs))
+                    {
+                        sw.WriteLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [LAUNCHER] " + msg);
+                    }
+                }
+            }
+            catch { }
+        }
+
         [STAThread]
         static void Main()
         {
@@ -25,18 +43,21 @@ namespace PointBlankLauncher
             appDir = AppDomain.CurrentDomain.BaseDirectory;
             Directory.SetCurrentDirectory(appDir);
 
-            // Single instance lock to prevent duplicate servers
-            bool isFirstInstance = false;
-            singleInstanceMutex = new Mutex(true, "PointBlankStudio_SingleInstance_Mutex", out isFirstInstance);
+            Log("=== Point Blank Studio Launcher Starting ===");
 
             port = ReadPortFromEnv();
+            Log("Target port: " + port);
+
+            bool isFirstInstance = AcquireSingleInstance();
+            Log("AcquireSingleInstance result: " + isFirstInstance);
 
             if (!isFirstInstance)
             {
                 if (IsServerResponding())
                 {
-                    // Server is active; simply bring up the app window
+                    Log("Secondary instance detected and server is responding; opening app window and exiting.");
                     OpenAppWindow();
+                    ReleaseMutex();
                     return;
                 }
 
@@ -52,8 +73,8 @@ namespace PointBlankLauncher
                             try { p.Kill(); } catch { }
                         }
                     }
-                    Thread.Sleep(400);
-                    singleInstanceMutex = new Mutex(true, "PointBlankStudio_SingleInstance_Mutex", out isFirstInstance);
+                    Thread.Sleep(300);
+                    isFirstInstance = AcquireSingleInstance();
                 }
                 catch { }
             }
@@ -61,7 +82,10 @@ namespace PointBlankLauncher
             try
             {
                 // 1. Check Node.js prerequisite
-                if (!IsNodeInstalled())
+                string nodePath = ResolveNodePath();
+                Log("Resolved nodePath: " + nodePath);
+
+                if (!IsNodeInstalled(nodePath))
                 {
                     DialogResult res = MessageBox.Show(
                         "Node.js was not found on your system.\n\nPoint Blank Studio requires Node.js (version 18 or newer) to run.\n\nWould you like to open https://nodejs.org to download it now?",
@@ -76,8 +100,9 @@ namespace PointBlankLauncher
                     return;
                 }
 
-                // 2. Check if server is already running on port
+                Log("Checking if server is already running...");
                 bool alreadyRunning = IsServerResponding();
+                Log("Is server already running on port " + port + "? " + alreadyRunning);
 
                 if (!alreadyRunning)
                 {
@@ -97,14 +122,19 @@ namespace PointBlankLauncher
                     }
 
                     // Start background server
-                    StartServerProcess();
+                    StartServerProcess(nodePath);
 
                     // Wait for server to become responsive
-                    bool ready = WaitForServer(15000);
+                    bool ready = WaitForServer(20000);
                     if (!ready)
                     {
+                        string exitInfo = (serverProcess != null && serverProcess.HasExited) 
+                            ? " (Server process exited with code " + serverProcess.ExitCode + ")" 
+                            : "";
+                        Log("Server failed to become responsive within timeout" + exitInfo);
+
                         MessageBox.Show(
-                            "Point Blank Studio server did not start in time. Check if another application is using port " + port + ".",
+                            "Point Blank Studio server did not start in time" + exitInfo + ".\n\nPlease check launcher.log or run start.bat to view console diagnostics.",
                             "Point Blank Studio",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Error
@@ -128,7 +158,7 @@ namespace PointBlankLauncher
                         Thread.Sleep(1500);
                         if (serverProcess != null && serverProcess.HasExited)
                         {
-                            // Server was stopped (e.g. user clicked Shutdown in web UI)
+                            Log("Server process exited; shutting down launcher.");
                             if (trayIcon != null)
                             {
                                 trayIcon.Visible = false;
@@ -138,7 +168,7 @@ namespace PointBlankLauncher
                         }
                         if (serverProcess == null && !IsServerResponding())
                         {
-                            // External server stopped
+                            Log("Server stopped responding; shutting down launcher.");
                             if (trayIcon != null)
                             {
                                 trayIcon.Visible = false;
@@ -151,10 +181,50 @@ namespace PointBlankLauncher
 
                 Application.Run();
             }
+            catch (Exception ex)
+            {
+                Log("FATAL UNHANDLED EXCEPTION in Main: " + ex.ToString());
+            }
             finally
             {
                 CleanupAndExit();
             }
+        }
+
+        private static bool AcquireSingleInstance()
+        {
+            try
+            {
+                bool createdNew;
+                singleInstanceMutex = new Mutex(true, "Local\\PointBlankStudio_SingleInstance_Mutex", out createdNew);
+                if (createdNew) return true;
+
+                if (singleInstanceMutex.WaitOne(500, false))
+                {
+                    return true;
+                }
+            }
+            catch (AbandonedMutexException)
+            {
+                // Previous owner terminated without releasing; we safely assume ownership
+                return true;
+            }
+            catch { }
+            return false;
+        }
+
+        private static void ReleaseMutex()
+        {
+            try
+            {
+                if (singleInstanceMutex != null)
+                {
+                    singleInstanceMutex.ReleaseMutex();
+                    singleInstanceMutex.Close();
+                    singleInstanceMutex = null;
+                }
+            }
+            catch { }
         }
 
         private static int ReadPortFromEnv()
@@ -184,11 +254,27 @@ namespace PointBlankLauncher
             return 3000;
         }
 
-        private static bool IsNodeInstalled()
+        private static string ResolveNodePath()
         {
+            string[] searchPaths = new string[]
+            {
+                @"C:\Program Files\nodejs\node.exe",
+                @"C:\Program Files (x86)\nodejs\node.exe",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\nodejs\node.exe")
+            };
+            foreach (string p in searchPaths)
+            {
+                if (File.Exists(p)) return p;
+            }
+            return "node.exe";
+        }
+
+        private static bool IsNodeInstalled(string nodePath)
+        {
+            if (File.Exists(nodePath)) return true;
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo("node", "-v");
+                ProcessStartInfo psi = new ProcessStartInfo(nodePath, "-v");
                 psi.CreateNoWindow = true;
                 psi.UseShellExecute = false;
                 psi.RedirectStandardOutput = true;
@@ -220,46 +306,99 @@ namespace PointBlankLauncher
             catch { }
         }
 
-        private static void StartServerProcess()
+        private static void StartServerProcess(string nodePath)
         {
             string serverJs = Path.Combine(appDir, "server.js");
+            Log("Starting server process: " + nodePath + " \"" + serverJs + "\" in " + appDir);
+
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo("node.exe", "\"" + serverJs + "\"");
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = nodePath;
+                psi.Arguments = "\"" + serverJs + "\"";
                 psi.WorkingDirectory = appDir;
                 psi.CreateNoWindow = true;
                 psi.UseShellExecute = false;
-                psi.WindowStyle = ProcessWindowStyle.Hidden;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
 
-                serverProcess = Process.Start(psi);
+                serverProcess = new Process();
+                serverProcess.StartInfo = psi;
+                serverProcess.OutputDataReceived += (s, e) => {
+                    if (!string.IsNullOrEmpty(e.Data)) Log("[SERVER-OUT] " + e.Data);
+                };
+                serverProcess.ErrorDataReceived += (s, e) => {
+                    if (!string.IsNullOrEmpty(e.Data)) Log("[SERVER-ERR] " + e.Data);
+                };
+
+                serverProcess.Start();
+                serverProcess.BeginOutputReadLine();
+                serverProcess.BeginErrorReadLine();
+
+                Log("serverProcess started with PID: " + serverProcess.Id);
             }
-            catch
+            catch (Exception ex)
             {
-                ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/c node \"" + serverJs + "\"");
-                psi.WorkingDirectory = appDir;
-                psi.CreateNoWindow = true;
-                psi.UseShellExecute = false;
-                psi.WindowStyle = ProcessWindowStyle.Hidden;
+                Log("Failed to start with nodePath, attempting cmd fallback. Error: " + ex.Message);
+                try
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", "/c node \"" + serverJs + "\"");
+                    psi.WorkingDirectory = appDir;
+                    psi.CreateNoWindow = true;
+                    psi.UseShellExecute = false;
 
-                serverProcess = Process.Start(psi);
+                    serverProcess = Process.Start(psi);
+                    Log("serverProcess (cmd fallback) started with PID: " + (serverProcess != null ? serverProcess.Id.ToString() : "null"));
+                }
+                catch (Exception ex2)
+                {
+                    Log("Failed cmd fallback: " + ex2.Message);
+                }
             }
         }
 
         private static bool IsServerResponding()
         {
+            System.Net.Sockets.Socket socket = null;
             try
             {
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://localhost:" + port + "/");
-                req.Timeout = 1200;
-                req.Method = "GET";
-                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                socket = new System.Net.Sockets.Socket(
+                    System.Net.Sockets.AddressFamily.InterNetwork,
+                    System.Net.Sockets.SocketType.Stream,
+                    System.Net.Sockets.ProtocolType.Tcp
+                );
+                socket.Blocking = false;
+                try
                 {
-                    return resp.StatusCode == HttpStatusCode.OK;
+                    socket.Connect(new IPEndPoint(IPAddress.Loopback, port));
                 }
+                catch (System.Net.Sockets.SocketException se)
+                {
+                    // 10035 = WSAEWOULDBLOCK (expected for non-blocking socket)
+                    if (se.NativeErrorCode != 10035) return false;
+                }
+
+                // Poll for connection completion with 400ms timeout
+                bool isWritable = socket.Poll(400 * 1000, System.Net.Sockets.SelectMode.SelectWrite);
+                if (!isWritable) return false;
+
+                // Check for socket connection error
+                int errorCode = (int)socket.GetSocketOption(
+                    System.Net.Sockets.SocketOptionLevel.Socket,
+                    System.Net.Sockets.SocketOptionName.Error
+                );
+                return errorCode == 0;
             }
             catch
             {
                 return false;
+            }
+            finally
+            {
+                if (socket != null)
+                {
+                    try { socket.Close(); } catch { }
+                }
             }
         }
 
@@ -271,10 +410,12 @@ namespace PointBlankLauncher
             {
                 if (serverProcess != null && serverProcess.HasExited)
                 {
+                    Log("serverProcess exited prematurely with code: " + serverProcess.ExitCode);
                     return false;
                 }
                 if (IsServerResponding())
                 {
+                    Log("Server responding after " + elapsed + " ms");
                     return true;
                 }
                 Thread.Sleep(step);
@@ -299,6 +440,8 @@ namespace PointBlankLauncher
             else if (File.Exists(chromeProg)) browserExe = chromeProg;
             else if (File.Exists(chromeProg86)) browserExe = chromeProg86;
 
+            Log("OpenAppWindow with browserExe: " + (browserExe ?? "default browser") + " URL: " + url);
+
             if (browserExe != null)
             {
                 try
@@ -308,7 +451,10 @@ namespace PointBlankLauncher
                     Process.Start(psi);
                     return;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Log("Failed to start browser in app mode: " + ex.Message);
+                }
             }
 
             // Fallback: Default system browser
@@ -358,6 +504,8 @@ namespace PointBlankLauncher
 
         private static void CleanupAndExit()
         {
+            Log("CleanupAndExit called");
+
             try
             {
                 if (trayIcon != null)
@@ -372,7 +520,7 @@ namespace PointBlankLauncher
             // Notify backend shutdown endpoint if possible
             try
             {
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://localhost:" + port + "/api/shutdown");
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + port + "/api/shutdown");
                 req.Method = "POST";
                 req.Timeout = 1000;
                 req.ContentLength = 0;
@@ -390,16 +538,7 @@ namespace PointBlankLauncher
             }
             catch { }
 
-            try
-            {
-                if (singleInstanceMutex != null)
-                {
-                    singleInstanceMutex.ReleaseMutex();
-                    singleInstanceMutex = null;
-                }
-            }
-            catch { }
-
+            ReleaseMutex();
             Application.Exit();
         }
     }

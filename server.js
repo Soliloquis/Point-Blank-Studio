@@ -2766,6 +2766,15 @@ const server = app.listen(PORT, HOST, () => {
   }
 });
 
+// Dual loopback support: bind IPv6 loopback (::1) alongside 127.0.0.1 so 'localhost' resolves instantly on Windows
+if (HOST === '127.0.0.1') {
+  try {
+    const ipv6Server = app.listen(PORT, '::1');
+    ipv6Server.on('error', () => {}); // Silently ignore if IPv6 is disabled on host system
+    ipv6Server.timeout = 1200000;
+  } catch (e) {}
+}
+
 server.timeout = 1200000; // 20 minutes
 server.keepAliveTimeout = 650000;
 server.headersTimeout = 660000;
