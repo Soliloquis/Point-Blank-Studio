@@ -51,5 +51,3 @@ Starts the server and automatically opens **[http://localhost:3000](http://local
 
 ## Single-Click Shutdown
 Click the **"Shutdown"** button in the top navigation bar of the web UI to cleanly stop the server and all background services, or press `Ctrl + C` in the launcher console window.
-
->>>>>>> 8e35c79 (Initial commit: Point Blank Studio)
