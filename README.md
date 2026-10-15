@@ -2,6 +2,8 @@
 
 > **AI-Powered video creation tool for the masses with the goal of enabling creators with a fusion of traditional workflows and modern AI tools.**
 
+[![Point Blank Studio Demo Video](https://img.youtube.com/vi/6RdwvzVaKJ0/maxresdefault.jpg)](https://youtu.be/6RdwvzVaKJ0?si=Wl6POMCLskY6pp7U)
+
 A professional desktop AI video production studio connecting video models with a unified visual style anchor as the sole source of truth for aesthetic consistency, featuring video ingestion, shot deconstruction, spatial continuity, and timeline assembly.
 
 ---
@@ -51,3 +53,16 @@ Starts the server and automatically opens **[http://localhost:3000](http://local
 
 ## Single-Click Shutdown
 Click the **"Shutdown"** button in the top navigation bar of the web UI to cleanly stop the server and all background services, or press `Ctrl + C` in the launcher console window.
+
+---
+
+## 🔒 Security Architecture
+
+Point Blank Studio is designed as a secure local desktop application with built-in defense-in-depth protections:
+
+- **Loopback Isolation (`127.0.0.1` / `::1`)**: The studio server binds strictly to local loopback interfaces by default. It is inaccessible to other devices on your local network (Wi-Fi/LAN), preventing unauthorized external access or API balance consumption.
+- **Strict CORS Defense**: Origin checks reject cross-origin requests from external web pages. Malicious websites visited in your browser cannot interact with or tamper with your studio instance.
+- **Path Traversal Sanitization**: All file parameters and paths are strictly sanitized and checked against storage directory boundaries to prevent arbitrary file reading or deletion.
+- **Upload Whitelisting & Size Limits**: Upload endpoints enforce strict MIME and extension whitelists (standard media formats only) with payload size limits to prevent arbitrary file execution.
+- **Credentials Protection**: API keys are securely stored locally, masked in client-facing payloads, and never committed to version control.
+
