@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables & Credentials
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Generated Media Storage & Scratch Files (Keep storage folders, ignore generated files)
+storage/clips/*
+!storage/clips/.gitkeep
+storage/keyframes/*
+!storage/keyframes/.gitkeep
+storage/exports/*
+!storage/exports/.gitkeep
+storage/audio/*
+!storage/audio/.gitkeep
+storage/uploads/*
+!storage/uploads/.gitkeep
+storage/references/*
+!storage/references/.gitkeep
+storage/temp*
+storage/projects/current_project.json
+
+# Local Scratchpad & Experimentation Files
+scratch/
+src-launcher/Test.*
+scripts/MakeIcon.exe
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

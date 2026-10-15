@@ -1,0 +1,1989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Point Blank Studio</title>
+  <meta name="description" content="Point Blank Studio — Cinematic AI Video Production Studio with Storyboard Deconstruction, Spatial Continuity, and Timeline Assembly.">
+  <link rel="icon" type="image/png" href="assets/icon.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=1792078">
+</head>
+<body>
+  <!-- Top App Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand">
+        <div class="logo-icon-img-wrap">
+          <img src="assets/icon.png" alt="Point Blank Studio" class="app-brand-logo">
+        </div>
+        <div class="brand-text">
+          <h1>Point Blank</h1>
+          <span class="brand-tag">Studio</span>
+        </div>
+      </div>
+
+      <div class="project-info">
+        <input type="text" id="project-title-input" class="project-title" value="Cinematic Storyboard Project" title="Click to rename project">
+      </div>
+    </div>
+
+    <!-- Center: Workspace Switcher Tabs (4-Stage Linear Production Pipeline) -->
+    <div class="workspace-tabs-group">
+      <button class="workspace-tab" id="tab-style-anchor" data-workspace="style-anchor">
+        <span class="tab-icon">🎨</span>
+        <span class="tab-label">1. Style Anchor</span>
+        <span class="tab-badge" id="style-anchor-status-badge">Set Anchor</span>
+      </button>
+      <button class="workspace-tab" id="tab-references" data-workspace="references">
+        <span class="tab-icon">👥</span>
+        <span class="tab-label">2. References</span>
+        <span class="tab-badge" id="references-count-badge">0 Assets</span>
+      </button>
+      <button class="workspace-tab active" id="tab-storyboard" data-workspace="storyboard">
+        <span class="tab-icon">🎬</span>
+        <span class="tab-label">3. Storyboard & Generation</span>
+        <span class="tab-badge" id="storyboard-count-badge">0 Shots</span>
+      </button>
+      <button class="workspace-tab" id="tab-timeline" data-workspace="timeline">
+        <span class="tab-icon">🎞️</span>
+        <span class="tab-label">4. Timeline Assembly</span>
+        <span class="tab-badge" id="timeline-count-badge">0 Clips</span>
+      </button>
+    </div>
+
+    <!-- Header Right: Points, Settings & Export -->
+    <div class="header-right">
+      <div class="api-status-group">
+        <button class="points-pill" id="btn-check-points" title="Click to refresh Fal.ai credits balance">
+          <span class="points-icon">⚡</span>
+          <span id="meshy-points-label">Fal Credits</span>
+        </button>
+        <div class="status-pill" id="meshy-status-pill" title="Fal.ai Video & Image Engine">
+          <span class="status-dot dot-active"></span>
+          <span class="status-label" id="active-model-label">Fal.ai (Wan 2.1)</span>
+        </div>
+      </div>
+
+      <button class="btn btn-secondary" id="open-settings-btn" title="Configure API Keys & Models">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        <span>Settings</span>
+      </button>
+
+      <button class="btn btn-primary btn-glow" id="open-export-modal-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span>Export Video</span>
+      </button>
+
+      <button class="btn btn-secondary btn-shutdown" id="btn-app-shutdown" title="Shut down PointBlank Studio and all background services with a single click">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+          <line x1="12" y1="2" x2="12" y2="12"></line>
+        </svg>
+        <span>Shut Down</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Body Layout -->
+  <main class="studio-layout">
+    
+    <!-- MAIN WORKSPACE CONTAINER (Switched by Tabs) -->
+    <div class="workspace-viewport">
+      
+      <!-- ================= WORKSPACE 1: VISUAL STYLE ANCHOR STUDIO ================= -->
+      <section class="workspace-section hidden" id="workspace-style-anchor">
+        <div class="style-anchor-workspace-content">
+          
+          <!-- Stage 1 Header Bar -->
+          <div class="style-header-bar">
+            <div class="style-header-left">
+              <div class="ingest-title-wrap">
+                <span class="icon-large">🎨</span>
+                <div>
+                  <h2>Visual Style Anchor Studio</h2>
+                  <p>The film's aesthetic source of truth. Dictates lighting, color harmony, medium, and grain across all shots.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="style-header-actions">
+              <button class="btn btn-secondary" id="btn-stage1-reset-anchor" title="Clear or reset style anchor">
+                <span>Reset Anchor</span>
+              </button>
+              <button class="btn btn-secondary" id="btn-stage1-ai-deconstruct" title="Deconstruct uploaded image into Style Bible using AI Vision">
+                <span class="btn-spinner hidden" id="style-deconstruct-spinner"></span>
+                <span>🤖 AI Deconstruct Style Anchor</span>
+              </button>
+              <button class="btn btn-primary btn-glow" id="btn-stage1-save-bible">
+                <span>💾 Save Style Bible</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Project-Wide AI Style Enforcement Banner -->
+          <div class="style-enforcement-banner">
+            <div class="enforcement-info">
+              <span class="enforcement-badge">⚡ Project-Wide Setting</span>
+              <p>The Visual Style Anchor is the sole aesthetic ground truth for this project. Every uploaded image is automatically deconstructed by AI Vision into transferrable artistic tokens (color palette, lighting architecture, rendering medium, grain, and camera optics) strictly enforced across all downstream storyboard shots and video diffusion takes.</p>
+            </div>
+          </div>
+
+          <!-- Main 2-Column Studio Grid -->
+          <div class="style-studio-grid">
+            
+            <!-- Left Column: Visual Anchor Dropzone & Preview -->
+            <div class="style-card style-dropzone-card">
+              <div class="card-header">
+                <div>
+                  <h3>Master Visual Anchor Image</h3>
+                  <span class="subtitle">Sole Source of Truth for Visual Identity</span>
+                </div>
+                <span class="badge badge-accent" id="stage1-anchor-badge">No Image</span>
+              </div>
+
+              <div class="stage1-dropzone" id="stage1-dropzone">
+                <div id="stage1-preview-container" class="image-preview-box hidden">
+                  <img id="stage1-style-img" src="" alt="Visual Reference Anchor">
+                  <button class="btn-icon btn-remove-img" id="stage1-remove-img-btn" title="Remove reference image">×</button>
+                </div>
+                <div id="stage1-dropzone-prompt" class="dropzone-content">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                  </svg>
+                  <p>Drag & drop master visual style image or <span class="highlight">browse files</span></p>
+                  <span class="hint">JPG, PNG, WebP up to 30MB</span>
+                </div>
+                <input type="file" id="stage1-file-input" accept="image/*" class="file-input-hidden">
+              </div>
+
+              <!-- Rules Banner -->
+              <div class="style-guideline-box">
+                <span class="tip-icon">✨</span>
+                <div>
+                  <strong>How the Style Anchor works:</strong>
+                  <p>Keyframes and video diffusion models strictly inherit the lighting temperature, color grading, brushwork, and camera optics defined here without copying specific narrative subjects.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Multi-Vector Style Bible Matrix -->
+            <div class="style-card style-bible-card">
+              <div class="card-header">
+                <div>
+                  <h3>Style Bible Deconstruction Matrix</h3>
+                  <span class="subtitle">Structured Aesthetic Tokens Inherited by All Shots</span>
+                </div>
+                <span class="badge-tech">Multi-Vector</span>
+              </div>
+
+              <div class="style-bible-matrix">
+                <!-- Color Palette & Grading Swatches -->
+                <div class="form-group">
+                  <label class="matrix-label">
+                    <span>🎨 Dominant Color Palette (5 Hex Swatches)</span>
+                    <span class="hint-text">Click any swatch to adjust color</span>
+                  </label>
+                  <div class="palette-swatches-grid" id="stage1-palette-grid">
+                    <div class="swatch-item"><input type="color" class="swatch-picker" value="#0b0f19"><span class="swatch-hex">#0B0F19</span></div>
+                    <div class="swatch-item"><input type="color" class="swatch-picker" value="#ff007f"><span class="swatch-hex">#FF007F</span></div>
+                    <div class="swatch-item"><input type="color" class="swatch-picker" value="#00f0ff"><span class="swatch-hex">#00F0FF</span></div>
+                    <div class="swatch-item"><input type="color" class="swatch-picker" value="#ffe600"><span class="swatch-hex">#FFE600</span></div>
+                    <div class="swatch-item"><input type="color" class="swatch-picker" value="#1c2438"><span class="swatch-hex">#1C2438</span></div>
+                  </div>
+                </div>
+
+                <!-- Lighting Architecture -->
+                <div class="form-group">
+                  <label for="stage1-lighting-input" class="matrix-label">💡 Lighting Architecture</label>
+                  <input type="text" id="stage1-lighting-input" class="text-input" placeholder="e.g. Volumetric neon rim lighting, high-contrast chiaroscuro, rain haze" value="Volumetric neon rim lighting, high-contrast chiaroscuro">
+                </div>
+
+                <!-- Medium & Animation Cadence -->
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="stage1-medium-select" class="matrix-label">🖌️ Rendering Medium & Art Form</label>
+                    <select id="stage1-medium-select" class="text-input">
+                      <option value="Large-Format IMAX 70mm Photorealism">🎬 Live-Action: IMAX 70mm Photorealism</option>
+                      <option value="Vintage 35mm Eastman Color Print">🎞️ Live-Action: Vintage 35mm Film</option>
+                      <option value="2D Anime & Manga (Studio Ghibli / Makoto Shinkai style)">🌸 Animation: 2D Studio Ghibli / Anime</option>
+                      <option value="Classic 90s Retro Cel Animation (Grainy ink lineart)">📼 Animation: 90s Retro Hand-Drawn Cel</option>
+                      <option value="Arcane & Fortiche Painterly Impasto (Textured brushstrokes)">🖌️ Animation: Arcane / Painterly Impasto</option>
+                      <option value="3D Pixar / DreamWorks CGI Animation (Stylized shaders)">🧸 Animation: 3D Pixar / CGI Animation</option>
+                      <option value="Claymation & Stop-Motion (Tactile physical texture)">🏺 Animation: Claymation & Stop-Motion</option>
+                      <option value="Graphic Novel / Comic Book Noir (Heavy ink & halftones)">🖋️ Graphic Novel: Comic Noir & Halftones</option>
+                      <option value="Stylized Digital Painting & Cyberpunk Photorealism" selected>✨ Stylized Digital Painting</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="stage1-cadence-select" class="matrix-label">⏱️ Animation Cadence (Frame Rate)</label>
+                    <select id="stage1-cadence-select" class="text-input">
+                      <option value="24" selected>24 fps (Standard Cinematic Fluidity)</option>
+                      <option value="12">12 fps (Animated on Twos - Classic Hand-Drawn Feel)</option>
+                      <option value="8">8 fps (Stop-Motion / Limited Animation Feel)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Film Grain & Surface Texture + Style LoRA Stack -->
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="stage1-grain-input" class="matrix-label">🎞️ Surface Texture & Line/Grain Quality</label>
+                    <input type="text" id="stage1-grain-input" class="text-input" placeholder="e.g. 35mm Anamorphic Film Grain, Watercolor wash, Ink line weight" value="35mm Anamorphic Film Grain">
+                  </div>
+                  <div class="form-group">
+                    <label for="stage1-lora-input" class="matrix-label">⚡ Aesthetic LoRA Stack & Trigger</label>
+                    <input type="text" id="stage1-lora-input" class="text-input" placeholder="e.g. ghibli-style:0.85, arcane-v2:1.0 (optional Fal LoRA)">
+                  </div>
+                </div>
+
+                <!-- Camera Lens & Cinematic Staging -->
+                <div class="form-group">
+                  <label for="stage1-camera-input" class="matrix-label">🎥 Camera Lens & Optical Character</label>
+                  <input type="text" id="stage1-camera-input" class="text-input" placeholder="e.g. Cinematic Widescreen 2.39:1, anamorphic horizontal flares" value="Cinematic Widescreen 2.39:1, anamorphic horizontal flares">
+                </div>
+
+                <!-- Artistic Style Brief (Transferrable Narrative Directives) -->
+                <div class="form-group">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label for="stage1-brief-textarea" class="matrix-label">📋 Master Artistic Style Brief</label>
+                    <span class="hint-text">Injected into diffusion models</span>
+                  </div>
+                  <textarea id="stage1-brief-textarea" class="text-input" rows="3" placeholder="Describe the master artistic principles applied to keyframes and video diffusion..."></textarea>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ================= WORKSPACE 2: REFERENCE CONSTRUCTION (Characters, Props, Places) ================= -->
+      <section class="workspace-section hidden" id="workspace-references">
+        <div class="references-workspace-content">
+          <!-- Reference Workspace Header -->
+          <div class="ref-header-bar">
+            <div class="ref-header-left">
+              <div class="ingest-title-wrap">
+                <span class="icon-large">🎨</span>
+                <div>
+                  <h2>Reference Construction Workspace</h2>
+                  <p>Define canonical visual references and descriptions for Characters, Props, and Places to enforce shot-to-shot consistency.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="ref-header-actions">
+              <div class="ref-filter-pills">
+                <button class="ref-filter-pill active" data-cat="all">All (<span id="count-all-refs">0</span>)</button>
+                <button class="ref-filter-pill" data-cat="characters">👤 Characters (<span id="count-char-refs">0</span>)</button>
+                <button class="ref-filter-pill" data-cat="props">📦 Props (<span id="count-prop-refs">0</span>)</button>
+                <button class="ref-filter-pill" data-cat="places">📍 Places (<span id="count-place-refs">0</span>)</button>
+              </div>
+
+              <button class="btn btn-primary btn-glow" id="btn-open-create-ref-modal">
+                <span>➕ New Reference Asset</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Tip Banner -->
+          <div class="ref-tip-banner">
+            <span class="tip-icon">💡</span>
+            <span class="tip-text"><strong>Shot-to-Shot Consistency:</strong> Upload visual references and specify distinct characteristics (e.g., hair braid, uniform insignia, ship hull decals, lighting). When generating storyboard shots, assign these assets to inject their visual traits into keyframe restyling and video generation prompts.</span>
+          </div>
+
+          <!-- Reference Cards Grid -->
+          <div class="references-grid" id="references-grid">
+            <!-- Dynamically populated reference cards -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= WORKSPACE 2: STORYBOARD & GENERATION ================= -->
+      <section class="workspace-section" id="workspace-storyboard">
+        <div class="storyboard-workspace-content">
+          
+          <!-- Ingestion Bar / Header -->
+          <div class="ingest-header-bar">
+            <div class="ingest-left">
+              <div class="ingest-title-wrap">
+                <span class="icon-large">📥</span>
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <h2>Video Ingestion & Storyboard Breakdown</h2>
+                    <button class="pill-btn-subtle" id="btn-jump-to-style-studio" title="Click to view or edit Master Style Anchor in Stage 1">
+                      <span class="status-dot dot-active"></span>
+                      <span id="storyboard-anchor-pill-text">🎨 Style Anchor</span>
+                    </button>
+                  </div>
+                  <p>Upload a video to analyze and deconstruct into an editable shot-by-shot storyboard.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dual-Video Ingestion Bay (Spatial Previs + True Color) -->
+            <div class="dual-video-bay">
+              <div class="video-slots-grid">
+                <!-- Slot 1: Spatial Previz Video -->
+                <div class="video-slot-card" id="slot-spatial-video">
+                  <div class="video-slot-header">
+                    <div class="slot-title-wrap">
+                      <span class="slot-icon">📐</span>
+                      <div>
+                        <div class="slot-title">1. Spatial Previs Video</div>
+                        <div class="slot-subtitle">Camera motion, blockout geometry & color keys</div>
+                      </div>
+                    </div>
+                    <span class="slot-status-pill badge-required" id="slot-spatial-badge">Required</span>
+                  </div>
+
+                  <div class="slot-dropzone" id="slot-spatial-dropzone">
+                    <div class="slot-empty-state" id="slot-spatial-empty">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+                      <span>Drag & drop Spatial Previs video or</span>
+                      <label class="btn btn-secondary btn-xs" for="ingest-video-input" style="cursor:pointer;">Choose Video</label>
+                    </div>
+                    <div class="slot-filled-state hidden" id="slot-spatial-filled">
+                      <div class="slot-file-info">
+                        <span class="slot-file-name" id="slot-spatial-filename">spatial_video.mp4</span>
+                        <span class="slot-file-meta" id="slot-spatial-meta">Loaded</span>
+                      </div>
+                      <div class="slot-actions">
+                        <label class="btn-link-xs" for="ingest-video-input" style="cursor:pointer;">Change</label>
+                        <button class="btn-link-xs btn-link-danger" id="btn-clear-spatial-slot">Clear</button>
+                      </div>
+                    </div>
+                  </div>
+                  <input type="file" id="ingest-video-input" accept="video/mp4,video/quicktime,video/webm" class="file-input-hidden">
+                </div>
+
+                <!-- Slot 2: True Color Video -->
+                <div class="video-slot-card" id="slot-color-video">
+                  <div class="video-slot-header">
+                    <div class="slot-title-wrap">
+                      <span class="slot-icon">🎨</span>
+                      <div>
+                        <div class="slot-title">2. True Color Video</div>
+                        <div class="slot-subtitle">Companion textured & shaded lighting pass</div>
+                      </div>
+                    </div>
+                    <span class="slot-status-pill badge-required" id="slot-color-badge">Required</span>
+                  </div>
+
+                  <div class="slot-dropzone" id="slot-color-dropzone">
+                    <div class="slot-empty-state" id="slot-color-empty">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                      <span>Drag & drop True Color video or</span>
+                      <label class="btn btn-secondary btn-xs" for="companion-video-input" style="cursor:pointer;">Choose Video</label>
+                    </div>
+                    <div class="slot-filled-state hidden" id="slot-color-filled">
+                      <div class="slot-file-info">
+                        <span class="slot-file-name" id="slot-color-filename">color_video.mp4</span>
+                        <span class="slot-file-meta" id="slot-color-meta">Loaded</span>
+                      </div>
+                      <div class="slot-actions">
+                        <label class="btn-link-xs" for="companion-video-input" style="cursor:pointer;">Change</label>
+                        <button class="btn-link-xs btn-link-danger" id="btn-clear-color-slot">Clear</button>
+                      </div>
+                    </div>
+                  </div>
+                  <input type="file" id="companion-video-input" accept="video/mp4,video/quicktime,video/webm" class="file-input-hidden">
+                </div>
+              </div>
+
+              <!-- Primary Action Toolbar -->
+              <div class="ingest-controls-row">
+                <div class="ingest-controls-left">
+                  <!-- Analysis button: Enabled ONLY when both slots are ready -->
+                  <button class="btn btn-primary btn-glow" id="btn-analyze-video" disabled title="Both Spatial Previs and True Color recordings are required for End-to-End Analysis">
+                    <span class="btn-spinner hidden" id="analyze-spinner"></span>
+                    <span>🤖 Run End-to-End Analysis</span>
+                  </button>
+
+                  <button class="btn btn-secondary" id="btn-ingest-dual-folder" title="Auto-detect and load both recordings directly from your Unity/Blender project folder">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <span class="btn-spinner hidden" id="dual-folder-spinner"></span>
+                    <span>📂 Ingest Recordings Folder</span>
+                  </button>
+
+                  <label class="btn btn-secondary" for="dual-video-input" title="Upload both video files simultaneously">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+                    <span>Upload Both Videos</span>
+                  </label>
+                  <input type="file" id="dual-video-input" accept="video/mp4,video/quicktime,video/webm" multiple class="file-input-hidden">
+                </div>
+
+                <div class="ingest-controls-right">
+                  <!-- Manual Per-Shot Alternative Workflow -->
+                  <label class="btn btn-secondary btn-sm" for="upload-keyframes-input" title="Upload custom images directly as keyframes (manual per-shot workflow)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                    <span>📁 Load Keyframe Images</span>
+                  </label>
+                  <input type="file" id="upload-keyframes-input" accept="image/*" multiple class="file-input-hidden">
+                  <input type="file" id="upload-color-frame-input" accept="image/*" class="file-input-hidden">
+
+                  <button class="btn btn-secondary btn-sm" id="btn-add-blank-shot" title="Add blank shot card for manual image uploads">
+                    <span>➕ Add Blank Shot</span>
+                  </button>
+
+                  <button class="btn btn-accent-glow btn-sm" id="btn-populate-approved-timeline">
+                    <span>➕ Send Approved to Timeline</span>
+                  </button>
+
+                  <button class="btn btn-secondary btn-danger-hover btn-sm" id="btn-clear-storyboard" title="Clear all storyboard shots and ingested videos">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    <span>Clear All</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- User Manual Video Description / Context Panel -->
+          <div class="video-context-card">
+            <div class="video-context-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:1.05rem;">📝</span>
+                <span class="context-label">Video Narrative & Context (Manual Input):</span>
+              </div>
+              <span class="context-hint">Ground truth story & scene context used for end-to-end analysis & optimal keyframe selection</span>
+            </div>
+            <textarea id="user-video-desc-input" class="user-video-desc-textarea" rows="2" placeholder="Manually describe what happens across this video (e.g. plot beats, subject actions, environment, camera movements) to direct the end-to-end analysis and extract the best keyframes..."></textarea>
+          </div>
+
+          <!-- Keyframe Generation Controls Toolbar -->
+          <div class="extraction-toolbar">
+            <span class="toolbar-label">⚙️ Keyframe Extraction Controls:</span>
+            <div class="extraction-ctrl-item">
+              <label for="extract-mode-select">Mode:</label>
+              <select id="extract-mode-select" class="select-input-sm">
+                <option value="count" selected>Target Shot Count</option>
+                <option value="interval">Fixed Interval (Seconds)</option>
+              </select>
+            </div>
+            <div class="extraction-ctrl-item" id="extract-count-group">
+              <label for="extract-count-input">Count:</label>
+              <select id="extract-count-input" class="select-input-sm">
+                <option value="4">4 Shots</option>
+                <option value="6">6 Shots</option>
+                <option value="8" selected>8 Shots</option>
+                <option value="12">12 Shots</option>
+                <option value="16">16 Shots</option>
+              </select>
+            </div>
+            <div class="extraction-ctrl-item hidden" id="extract-interval-group">
+              <label for="extract-interval-input">Interval:</label>
+              <select id="extract-interval-input" class="select-input-sm">
+                <option value="1">Every 1s</option>
+                <option value="2">Every 2s</option>
+                <option value="3" selected>Every 3s</option>
+                <option value="4">Every 4s</option>
+                <option value="5">Every 5s</option>
+              </select>
+            </div>
+            <div class="extraction-ctrl-item">
+              <label for="extract-start-input">Start (s):</label>
+              <input type="number" id="extract-start-input" min="0" step="0.5" value="0" class="input-number-sm">
+            </div>
+            <div class="extraction-ctrl-item">
+              <label for="extract-end-input">End (s):</label>
+              <input type="number" id="extract-end-input" min="0" step="0.5" placeholder="Full" class="input-number-sm">
+            </div>
+          </div>
+
+          <!-- Keyframe Restyling Engine & Playblast Overhaul Toolbar -->
+          <div class="extraction-toolbar restyle-engine-toolbar" style="margin-top:6px; background:linear-gradient(90deg, rgba(20, 26, 42, 0.95), rgba(16, 21, 35, 0.85)); border-color:rgba(0, 240, 255, 0.25);">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; width:100%;">
+              <span class="toolbar-label" style="color:var(--accent-cyan); display:flex; align-items:center; gap:6px;">
+                <span>🎨 Restyle Engine:</span>
+              </span>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; background:rgba(0, 240, 255, 0.08); padding:3px 10px; border-radius:4px; border:1px solid rgba(0, 240, 255, 0.2);" title="Enable when input video is a 3D Blender playblast, animatic previs, or untextured blockout with primary color ID mattes">
+                <input type="checkbox" id="toggle-playblast-mode" checked style="accent-color:var(--accent-cyan); cursor:pointer;">
+                <span style="font-size:0.75rem; font-weight:700; color:var(--text-main);">🎬 3D Playblast / Previs Overhaul Mode</span>
+              </label>
+              <div class="extraction-ctrl-item" style="display:flex; align-items:center; gap:8px;">
+                <label for="restyle-strength-slider" style="font-size:0.75rem; color:var(--text-muted);" title="Transformation strength. With True Color keyframes, 0.55-0.65 preserves environmental canvas while replacing proxy geometry with consistent assets">Denoise Freedom:</label>
+                <input type="range" id="restyle-strength-slider" min="0.30" max="0.95" step="0.01" value="0.58" style="width:100px; cursor:pointer; accent-color:var(--accent-cyan);">
+                <span id="restyle-strength-value" style="font-weight:700; color:var(--accent-cyan); font-size:0.78rem; min-width:34px;">58%</span>
+              </div>
+              <span class="badge" style="background:rgba(16, 185, 129, 0.15); color:var(--accent-emerald); border:1px solid rgba(16, 185, 129, 0.3); font-size:0.7rem; padding:2px 8px; border-radius:4px;" id="badge-ip-adapter-status" title="Consistent Asset reference images are sent to neural IP-Adapter">🎯 IP-Adapter Active</span>
+            </div>
+          </div>
+
+          <!-- Hidden input for single shot keyframe replacement -->
+          <input type="file" id="replace-keyframe-input" accept="image/*" class="file-input-hidden">
+
+          <!-- Ingestion Status / File info -->
+          <div id="ingest-status-banner" class="ingest-banner hidden">
+            <span id="ingest-banner-text">Processing video...</span>
+          </div>
+
+          <!-- End-to-End Video Analysis Summary Banner -->
+          <div id="end-to-end-summary-card" class="end-to-end-summary-card hidden">
+            <div class="e2e-summary-header">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:1.1rem;">🎬</span>
+                <span style="font-weight:700; font-size:0.85rem; color:var(--text-main);">End-to-End Video Analysis & Story Breakdown</span>
+              </div>
+              <span id="analysis-pacing-badge" class="badge-tech">Cinematic Pace</span>
+            </div>
+            <p id="analysis-summary-text" class="e2e-summary-text"></p>
+          </div>
+
+          <!-- Storyboard Shots Grid -->
+          <div class="storyboard-grid-wrapper">
+            <div class="storyboard-grid" id="storyboard-grid">
+              <!-- Dynamically populated storyboard cards -->
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ================= WORKSPACE 4: TIMELINE ASSEMBLY & NLE STUDIO ================= -->
+      <section class="workspace-section hidden" id="workspace-timeline">
+        <div class="timeline-workspace-content nle-workspace-layout">
+          
+          <!-- Top Row: Program Monitor (Cinema Preview) & NLE Inspector Dock -->
+          <div class="nle-upper-row">
+            
+            <!-- Left Pane: Program Monitor -->
+            <div class="player-container nle-monitor-box">
+              <div class="player-wrapper">
+                <video id="cinema-player" class="cinema-video-deck deck-a" preload="auto" playsinline>
+                  Your browser does not support video playback.
+                </video>
+                <video id="cinema-player-b" class="cinema-video-deck deck-b" preload="auto" playsinline style="opacity:0; pointer-events:none;">
+                </video>
+                <img id="cinema-image-player" class="cinema-image-deck deck-a hidden" style="width:100%; height:100%; object-fit:contain;" alt="Animatic Preview">
+                <img id="cinema-image-player-b" class="cinema-image-deck deck-b hidden" style="width:100%; height:100%; object-fit:contain; opacity:0;" alt="Animatic Preview">
+                <div id="cinema-transition-flash" class="cinema-transition-flash" style="opacity:0; pointer-events:none;"></div>
+                <!-- Safe Area Overlay Grid (Toggleable) -->
+                <div class="safe-area-overlay hidden" id="safe-area-overlay">
+                  <div class="safe-area-action"></div>
+                  <div class="safe-area-title"></div>
+                  <div class="safe-area-center-cross"></div>
+                </div>
+
+                <div class="player-overlay" id="player-overlay">
+                  <div class="overlay-top">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="overlay-clip-title" id="overlay-clip-title">Timeline Preview</span>
+                      <span class="overlay-resolution-pill">1080p 30fps</span>
+                    </div>
+                    <span class="overlay-badge" id="overlay-model-badge">Fal.ai (Wan 2.1)</span>
+                  </div>
+                  <div class="overlay-center" id="overlay-play-center">
+                    <button class="btn-big-play" id="big-play-btn" aria-label="Play Video">
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- NLE Transport Controls -->
+              <div class="player-controls nle-transport-controls">
+                <div class="controls-left">
+                  <button class="btn-ctrl" id="btn-prev-clip" title="Previous Cut / Clip (Home / [)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5"></line></svg>
+                  </button>
+                  <button class="btn-ctrl" id="btn-step-back" title="Step Back 1s (←)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                  </button>
+                  <button class="btn-ctrl btn-play-pause" id="btn-play-pause" title="Play/Pause (Space)">
+                    <svg id="icon-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <svg id="icon-pause" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                  </button>
+                  <button class="btn-ctrl" id="btn-step-fwd" title="Step Forward 1s (→)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+                  <button class="btn-ctrl" id="btn-next-clip" title="Next Cut / Clip (End / ])">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5"></line></svg>
+                  </button>
+                  <button class="btn-ctrl" id="btn-loop-timeline" title="Loop Sequence">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+                  </button>
+                </div>
+
+                <div class="controls-center">
+                  <span class="time-display smpte-timecode" id="timecode-display">00:00:00:00 / 00:00:00:00</span>
+                </div>
+
+                <div class="controls-right">
+                  <span class="playback-rate-label" id="playback-speed-btn" title="Playback Speed">1.0x</span>
+                  <button class="btn-ctrl" id="btn-toggle-guides" title="Toggle Title & Action Safe Margins">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="10" height="10"></rect></svg>
+                  </button>
+                  <button class="btn-ctrl" id="btn-fullscreen" title="Fullscreen">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Vertical/Column Splitter between Program Monitor and Inspector -->
+            <div class="nle-splitter nle-splitter-col" id="nle-splitter-col" title="Drag to resize Side Dock (Double-click to collapse / expand)">
+              <div class="splitter-grip-col"></div>
+            </div>
+
+            <!-- Floating Button to Expand Side Dock when collapsed -->
+            <button class="btn-expand-inspector hidden" id="btn-expand-inspector" title="Expand Side Dock (Inspector & Audio EQ)">
+              <span>⚙️ Inspector & EQ</span>
+            </button>
+
+            <!-- Right Pane: NLE Side Dock (Clip Inspector + Audio Master & EQ) -->
+            <div class="nle-side-dock" id="nle-side-dock">
+              <!-- Upper: NLE Clip Inspector & Properties Panel -->
+              <div class="nle-inspector-card" id="clip-inspector-drawer">
+                <div class="inspector-card-header">
+                  <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                    <span class="inspector-badge">Clip Inspector</span>
+                    <span class="inspector-title" id="inspector-clip-title">No Clip Selected</span>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:4px;">
+                    <button class="btn-icon" id="toggle-inspector-collapse-btn" title="Collapse Side Dock">⇥</button>
+                    <button class="btn-icon" id="close-inspector-btn" title="Deselect clip">✕</button>
+                  </div>
+                </div>
+
+                <!-- Selected Clip State -->
+                <div class="inspector-content-wrap hidden" id="inspector-selected-content">
+                  <!-- Mini Filmstrip Preview -->
+                  <div class="inspector-clip-preview-strip">
+                    <div class="inspector-thumb-preview" id="inspector-thumb-preview">
+                      <img id="inspector-thumb-img" src="" alt="Thumbnail" style="display:none;">
+                      <div id="inspector-thumb-fallback" style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-dim); font-size:0.7rem;">🎬 Filmstrip Frame</div>
+                    </div>
+                    <div class="inspector-clip-info">
+                      <span class="clip-model-tag" id="inspector-model-badge">Wan 2.1 (Fal.ai)</span>
+                      <span class="effective-duration-badge" id="effective-duration-badge">0.0s</span>
+                    </div>
+                  </div>
+
+                  <!-- Non-Destructive Trimmer -->
+                  <div class="inspector-section-block">
+                    <div class="inspector-section-label">
+                      <span>Non-Destructive Trimmer</span>
+                      <span style="font-size:0.64rem; color:var(--text-dim);">In/Out Marks</span>
+                    </div>
+                    
+                    <div class="trim-quick-marks-row">
+                      <button class="btn btn-xs btn-secondary" id="btn-mark-in-playhead" title="Set In-Point to Playhead (I)">[ Mark In (I)</button>
+                      <button class="btn btn-xs btn-secondary" id="btn-mark-out-playhead" title="Set Out-Point to Playhead (O)">Mark Out (O) ]</button>
+                      <button class="btn btn-xs btn-secondary" id="btn-reset-trim" title="Reset to full clip length">Reset</button>
+                    </div>
+
+                    <div class="inspector-grid">
+                      <div class="trim-control-col">
+                        <label for="trim-start-input">In Point</label>
+                        <div class="input-with-unit">
+                          <input type="number" id="trim-start-input" min="0" step="0.1" value="0.0">
+                          <span>s</span>
+                        </div>
+                      </div>
+                      <div class="trim-control-col">
+                        <label for="trim-end-input">Out Point</label>
+                        <div class="input-with-unit">
+                          <input type="number" id="trim-end-input" min="0.5" step="0.1" value="4.0">
+                          <span>s</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button class="btn btn-secondary btn-sm" id="btn-apply-trim" style="width:100%; margin-top:8px;">
+                      Apply Trim
+                    </button>
+                  </div>
+
+                  <!-- Editing Operations -->
+                  <div class="inspector-section-block">
+                    <div class="inspector-section-label">
+                      <span>Timeline Operations</span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <button class="btn btn-secondary btn-sm" id="btn-split-at-playhead" title="Razor split selected clip at playhead (C)">
+                        ✂️ Split Clip at Playhead
+                      </button>
+                      <button class="btn btn-danger btn-sm" id="btn-remove-selected-clip" title="Remove selected clip from sequence (Del)">
+                        🗑️ Ripple Delete Clip
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Default Empty State in Inspector -->
+                <div class="inspector-empty-state" id="inspector-empty-state">
+                  <span style="font-size:1.4rem; opacity:0.6;">🎞️</span>
+                  <p style="font-size:0.78rem; color:var(--text-dim); margin-top:6px; text-align:center;">
+                    Click any clip on the V1 or A1 tracks below to trim, split, or inspect properties.
+                  </p>
+                  <div class="nle-shortcuts-cheatsheet">
+                    <span style="font-weight:700; color:var(--accent-cyan); font-size:0.68rem; text-transform:uppercase;">NLE Hotkeys:</span>
+                    <div class="shortcut-item"><span>Space</span><span>Play / Pause</span></div>
+                    <div class="shortcut-item"><span>← / →</span><span>Step 1s</span></div>
+                    <div class="shortcut-item"><span>C</span><span>Razor Split</span></div>
+                    <div class="shortcut-item"><span>I / O</span><span>Mark In / Out</span></div>
+                    <div class="shortcut-item"><span>Del</span><span>Ripple Delete</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Horizontal/Row Splitter between Upper Row and Timeline Multi-Track -->
+          <div class="nle-splitter nle-splitter-row" id="nle-splitter-row" title="Drag to resize Timeline height (Double-click to reset)">
+            <div class="splitter-grip-row">
+              <span class="grip-dot"></span>
+              <span class="grip-dot"></span>
+              <span class="grip-dot"></span>
+            </div>
+          </div>
+
+          <!-- Bottom Row: Timeline Tracks & Vertical Audio Master / Equalizer -->
+          <div class="nle-bottom-row" id="nle-bottom-row">
+            <!-- Middle Section: NLE Editing Toolbar & Sequence Header -->
+            <div class="timeline-container nle-timeline-section" id="timeline-container">
+            <div class="timeline-header nle-toolbar-header">
+              <!-- Left Toolset -->
+              <div class="nle-toolset">
+                <button class="btn-nle-tool active" id="tool-select" title="Selection Tool (V)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M4 2l16 11-8 2-4 7-4-20z"/></svg>
+                  <span>Select</span>
+                </button>
+                <button class="btn-nle-tool" id="tool-razor" title="Razor Blade Tool - Split Clip at Playhead (C)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+                  <span>Razor</span>
+                </button>
+                <button class="btn-nle-tool active" id="tool-snap" title="Magnetic Snapping (S)">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v7a6 6 0 0 0 12 0V3"></path><line x1="4" y1="3" x2="8" y2="3"></line><line x1="16" y1="3" x2="20" y2="3"></line></svg>
+                  <span>Snap</span>
+                </button>
+              </div>
+
+              <!-- Zoom Controls -->
+              <div class="nle-zoom-controls">
+                <button class="btn-ctrl btn-xs" id="btn-zoom-out" title="Zoom Out (-)">−</button>
+                <input type="range" id="timeline-zoom-slider" min="50" max="220" value="95" title="Timeline Time Zoom">
+                <button class="btn-ctrl btn-xs" id="btn-zoom-in" title="Zoom In (+)">+</button>
+                <button class="btn btn-xs btn-secondary" id="btn-zoom-fit" title="Fit Sequence to Window (\)">Fit</button>
+              </div>
+
+              <!-- Sequence Metrics & Actions -->
+              <div class="timeline-actions">
+                <div class="total-runtime-box">
+                  <span class="clip-count-tag" id="timeline-clip-count">0 Clips</span>
+                  <span class="runtime-label">Duration:</span>
+                  <span class="runtime-value" id="timeline-total-duration">00:00.0</span>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-import-approved-clips">+ Import Approved Storyboard</button>
+                <button class="btn btn-secondary btn-sm" id="btn-clear-timeline" title="Clear all clips and transitions from timeline">Clear All</button>
+                <button class="btn btn-primary btn-sm btn-glow" id="btn-open-export-modal" title="Stitch and render final video">🚀 Export Video</button>
+              </div>
+            </div>
+
+            <!-- Multi-Track Timeline Canvas Area -->
+            <div class="nle-timeline-viewport">
+              
+              <!-- Track Header Column (Fixed Left) -->
+              <div class="nle-track-header-col">
+                <div class="nle-ruler-corner-header">
+                  <span style="font-family:var(--font-mono); font-size:0.62rem; color:var(--text-dim);">TIMECODE</span>
+                </div>
+                <!-- V1 Video Track Header -->
+                <div class="nle-track-header-cell v1-header">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="track-pill track-v">V1</span>
+                    <span class="track-name">Video</span>
+                  </div>
+                  <div class="track-icons">
+                    <button class="track-icon-btn" id="btn-toggle-v1-vis" title="Toggle Track Visibility">👁️</button>
+                    <button class="track-icon-btn" id="btn-toggle-v1-lock" title="Lock Track">🔒</button>
+                  </div>
+                </div>
+                <!-- A1 Audio Track Header -->
+                <div class="nle-track-header-cell a1-header">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="track-pill track-a">A1</span>
+                    <span class="track-name">Audio</span>
+                  </div>
+                  <div class="track-icons">
+                    <button class="track-icon-btn audio-mute-btn" id="btn-toggle-a1-mute" title="Mute Audio (M)">M</button>
+                    <button class="track-icon-btn" id="btn-toggle-a1-solo" title="Solo Audio">S</button>
+                    <button class="track-icon-btn" id="btn-toggle-a1-lock" title="Lock Track">🔒</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Scrollable Track Lanes Area -->
+              <div class="timeline-track-wrapper nle-tracks-scrollable" id="timeline-track-wrapper">
+                
+                <!-- Playhead Needle (Spans entire height of ruler & tracks) -->
+                <div class="timeline-playhead nle-timeline-playhead" id="timeline-playhead">
+                  <div class="playhead-needle nle-needle-head"></div>
+                  <div class="nle-needle-line"></div>
+                </div>
+
+                <!-- Timeline Ruler -->
+                <div class="timeline-ruler nle-timeline-ruler" id="timeline-ruler">
+                  <!-- Ruler tick marks dynamically populated by JS based on zoom & duration -->
+                </div>
+
+                <!-- Track Lanes Container -->
+                <div class="nle-lanes-container">
+                  <!-- Video Lane (V1) -->
+                  <div class="nle-track-lane nle-lane-video" id="timeline-track">
+                    <div class="empty-timeline-state" id="empty-timeline-state">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+                      <p>Timeline empty. In the Storyboard workspace, generate shots and click "Send to Timeline"!</p>
+                    </div>
+                  </div>
+
+                  <!-- Audio Lane (A1) -->
+                  <div class="nle-track-lane nle-lane-audio" id="timeline-audio-lane">
+                    <!-- Audio stems dynamically rendered parallel to video clips -->
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div> <!-- /timeline-container -->
+
+          <!-- Vertical Audio Master & Equalizer Dock (Sliding Timeline to the Left) -->
+            <div class="nle-audio-panel-card nle-audio-vertical-dock" id="nle-audio-panel-card">
+              <div class="audio-panel-header">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span class="audio-panel-badge">AUDIO</span>
+                  <span class="audio-panel-title">Master & EQ</span>
+                </div>
+                <div class="eq-presets-group">
+                  <span class="eq-preset-chip hidden" id="eq-preset-indicator">Flat</span>
+                  <button class="eq-preset-btn active" id="btn-eq-flat" data-preset="flat" title="Flat EQ">Flat</button>
+                  <button class="eq-preset-btn" id="btn-eq-dialogue" data-preset="dialogue" title="Voice Boost">Voice</button>
+                  <button class="eq-preset-btn" id="btn-eq-bass" data-preset="bass" title="Bass Boost">Bass</button>
+                  <button class="eq-preset-btn" id="btn-eq-cinema" data-preset="cinema" title="Cinema Dynamic">Cinema</button>
+                </div>
+              </div>
+
+              <div class="audio-panel-body audio-mixer-body-vertical">
+                <div class="audio-mixer-strips">
+                  <!-- Strip 1: Low (Bass) -->
+                  <div class="mixer-strip">
+                    <span class="strip-label">Low</span>
+                    <span class="strip-val" id="eq-low-badge">0 dB</span>
+                    <div class="strip-slider-wrap">
+                      <input type="range" class="vertical-range-slider" id="eq-low-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Bass (100Hz)">
+                    </div>
+                    <span class="strip-freq">100Hz</span>
+                  </div>
+
+                  <!-- Strip 2: Mid (Voice) -->
+                  <div class="mixer-strip">
+                    <span class="strip-label">Mid</span>
+                    <span class="strip-val" id="eq-mid-badge">0 dB</span>
+                    <div class="strip-slider-wrap">
+                      <input type="range" class="vertical-range-slider" id="eq-mid-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Voice / Mids (1kHz)">
+                    </div>
+                    <span class="strip-freq">1kHz</span>
+                  </div>
+
+                  <!-- Strip 3: High (Treble) -->
+                  <div class="mixer-strip">
+                    <span class="strip-label">High</span>
+                    <span class="strip-val" id="eq-high-badge">0 dB</span>
+                    <div class="strip-slider-wrap">
+                      <input type="range" class="vertical-range-slider" id="eq-high-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Treble (8kHz)">
+                    </div>
+                    <span class="strip-freq">8kHz</span>
+                  </div>
+
+                  <!-- Divider between EQ and Master -->
+                  <div class="mixer-strip-divider"></div>
+
+                  <!-- Strip 4: Master Volume & Peak VU Meter -->
+                  <div class="mixer-strip master-strip">
+                    <span class="strip-label master-accent">Master</span>
+                    <span class="strip-val" id="volume-val-label">100%</span>
+                    <div class="master-fader-with-meter">
+                      <div class="strip-slider-wrap">
+                        <input type="range" class="vertical-range-slider master-fader" id="master-volume-slider" min="0" max="1" step="0.05" value="1" orient="vertical" title="Master Volume">
+                      </div>
+                      <!-- Stereo Peak VU Meter -->
+                      <div class="vu-meter-wrap vertical-vu" id="side-vu-meter" title="Master Peak Meter (L/R)">
+                        <div class="vu-bar left" id="vu-meter-left">
+                          <span class="vu-led red"></span>
+                          <span class="vu-led yellow"></span>
+                          <span class="vu-led green"></span>
+                          <span class="vu-led green"></span>
+                        </div>
+                        <div class="vu-bar right" id="vu-meter-right">
+                          <span class="vu-led red"></span>
+                          <span class="vu-led yellow"></span>
+                          <span class="vu-led green"></span>
+                          <span class="vu-led green"></span>
+                        </div>
+                      </div>
+                    </div>
+                    <button class="btn-ctrl btn-mute-ctrl" id="btn-mute" title="Mute/Unmute Master (M)">
+                      <svg id="icon-volume-on" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                      <svg id="icon-volume-muted" class="hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div> <!-- /nle-bottom-row -->
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Keyframe Review & Lightbox Comparison Modal -->
+  <div class="modal-backdrop hidden" id="keyframe-lightbox-modal">
+    <div class="modal-card keyframe-lightbox-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="icon-indicator" id="kf-modal-icon">🖼️</span>
+          <div>
+            <h3 id="kf-modal-title">Keyframe Review</h3>
+            <span class="kf-modal-subtitle" id="kf-modal-subtitle">Shot #1</span>
+          </div>
+        </div>
+
+        <!-- Center: View Mode Switcher -->
+        <div class="kf-mode-switcher">
+          <button class="kf-mode-btn active" id="btn-kf-mode-single" data-mode="single">Single View</button>
+          <button class="kf-mode-btn" id="btn-kf-mode-compare" data-mode="compare">Side-by-Side Compare</button>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px;">
+          <!-- Quick Shot Navigation -->
+          <button class="btn-ctrl btn-xs" id="btn-kf-prev-shot" title="Previous Shot (←)">◀</button>
+          <span class="kf-shot-counter" id="kf-shot-counter">1 / 12</span>
+          <button class="btn-ctrl btn-xs" id="btn-kf-next-shot" title="Next Shot (→)">▶</button>
+          <button class="btn-icon" id="close-kf-modal-btn" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body kf-lightbox-body">
+        <!-- Sub-tabs for Single View (Spatial vs True Color vs Comp Out vs Restyle) -->
+        <div class="kf-single-tabs" id="kf-single-tabs">
+          <button class="kf-tab-pill active" id="tab-kf-source" data-target="source">
+            <span>1. Spatial Previs</span>
+          </button>
+          <button class="kf-tab-pill" id="tab-kf-color" data-target="color">
+            <span>2. True Color</span>
+          </button>
+          <button class="kf-tab-pill" id="tab-kf-compout" data-target="compout">
+            <span>4. Comp Out</span>
+          </button>
+          <button class="kf-tab-pill" id="tab-kf-restyle" data-target="restyle">
+            <span>5. Restyle</span>
+          </button>
+        </div>
+
+        <!-- Single Image Viewport -->
+        <div class="kf-viewport-single" id="kf-viewport-single">
+          <div class="kf-image-stage">
+            <img id="kf-single-img" src="" alt="Keyframe Preview" class="kf-large-img">
+            <div id="kf-single-empty" class="kf-empty-notice hidden">
+              <span style="font-size:2rem;">🎨</span>
+              <p id="kf-single-empty-text" style="margin:8px 0; color:var(--text-muted);">No image exists yet for this stage.</p>
+              <button class="btn btn-sm btn-primary" id="btn-lightbox-restyle">🎨 Restyle Keyframe Now</button>
+            </div>
+          </div>
+          <div class="kf-stage-meta-row">
+            <span class="kf-stage-badge" id="kf-stage-badge">Spatial Previs Keyframe</span>
+            <div class="kf-meta-tags">
+              <span class="kf-meta-pill" id="kf-meta-res">1920 × 1080</span>
+              <a href="#" target="_blank" class="kf-meta-link" id="kf-open-raw" title="Open full-resolution image in new tab">↗ Open Raw</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tri-Split Comparison Viewport (Spatial vs True Color vs Ideal Regened) -->
+        <div class="kf-viewport-compare hidden" id="kf-viewport-compare">
+          <!-- Col 1: Spatial Frame -->
+          <div class="kf-compare-col">
+            <div class="kf-compare-header">
+              <span class="compare-badge badge-source">1. Spatial Previs</span>
+              <span class="compare-info" id="kf-compare-source-info">3D Playblast / Blocking</span>
+            </div>
+            <div class="kf-compare-img-wrap">
+              <img id="kf-compare-source-img" src="" alt="Spatial Previs Frame" class="kf-large-img">
+            </div>
+          </div>
+
+          <!-- Col 2: True Color Reference Frame -->
+          <div class="kf-compare-col">
+            <div class="kf-compare-header">
+              <span class="compare-badge badge-color" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4);">2. True Color Pass</span>
+              <span class="compare-info" id="kf-compare-color-info">Textured Engine View</span>
+            </div>
+            <div class="kf-compare-img-wrap">
+              <img id="kf-compare-color-img" src="" alt="True Color Reference Frame" class="kf-large-img">
+              <div id="kf-compare-color-empty" class="kf-empty-notice hidden">
+                <span style="font-size:1.8rem;">🎨</span>
+                <p style="margin:6px 0; font-size:0.75rem; color:var(--text-dim);">No Color Pass Loaded</p>
+                <button class="btn btn-xs btn-secondary" id="btn-compare-upload-color">📷 Load Color Pass</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Col 3: Regened Output -->
+          <div class="kf-compare-col">
+            <div class="kf-compare-header">
+              <span class="compare-badge badge-regened">3. Ideal Regened KF</span>
+              <span class="compare-info" id="kf-compare-regened-info">Style Anchor + Neural IP</span>
+            </div>
+            <div class="kf-compare-img-wrap">
+              <img id="kf-compare-regened-img" src="" alt="Regened Keyframe" class="kf-large-img">
+              <div id="kf-compare-regened-empty" class="kf-empty-notice hidden">
+                <span style="font-size:1.8rem;">🎨</span>
+                <p style="margin:6px 0; font-size:0.75rem; color:var(--text-dim);">Not Restyled Yet</p>
+                <button class="btn btn-xs btn-primary" id="btn-compare-restyle">🎨 Restyle</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shot Description / Action details bar -->
+        <div class="kf-desc-bar">
+          <div style="display:flex; align-items:baseline; gap:6px;">
+            <span class="kf-desc-label">Action:</span>
+            <span class="kf-desc-text" id="kf-desc-text">Shot description</span>
+          </div>
+          <div id="kf-style-notes-wrap" class="kf-style-notes-wrap">
+            <span class="kf-desc-label">Style Notes:</span>
+            <span class="kf-style-text" id="kf-style-text">Style Anchor notes</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer kf-modal-footer">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" id="btn-kf-replace-source" title="Load custom image for Spatial Previs">📷 Spatial Previs</button>
+          <button class="btn btn-secondary btn-sm" id="btn-kf-replace-color" title="Load custom image for True Color Reference">🎨 Color Pass</button>
+          <button class="btn btn-primary btn-sm btn-glow" id="btn-kf-trigger-restyle" title="Restyle this keyframe with Style Anchor">🎨 Restyle Keyframe</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="close-kf-modal-footer-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layered Restyle Studio Modal -->
+  <div class="modal-backdrop hidden" id="layered-restyle-modal">
+    <div class="modal-card layered-studio-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="icon-indicator" style="background:rgba(59,130,246,0.15); border-color:rgba(59,130,246,0.4); color:#60a5fa;">📐</span>
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h3 id="layer-studio-title" style="margin:0;">Layered Restyle Studio</h3>
+              <span class="badge-tech" style="font-size:0.68rem; background:rgba(99,102,241,0.2); color:#a5b4fc; border:1px solid rgba(99,102,241,0.4);">4-Corner Perspective Pin</span>
+            </div>
+            <span class="kf-modal-subtitle" id="layer-studio-subtitle">Decomposed Consistent Asset Layers</span>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="btn btn-secondary btn-sm" id="btn-layer-re-extract" title="Re-extract layers from Spatial Previs & True Color frame">🔄 Re-extract</button>
+          <button class="btn btn-secondary btn-sm" id="btn-layer-reset-all" title="Reset all layer corner pins to initial bounds">↺ Reset Pins</button>
+          <button class="btn btn-primary btn-sm btn-glow" id="btn-layer-bake" title="Bake perspective composite & save as Ideal Regened Keyframe">✨ Harmonize & Save Keyframe</button>
+          <button class="btn-icon" id="close-layer-modal-btn" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body layered-studio-body">
+        <!-- Center/Left: Interactive Canvas Viewport -->
+        <div class="layer-viewport-wrap">
+          <div class="layer-canvas-stage" id="layer-canvas-stage">
+            <canvas id="layer-composite-canvas" width="1920" height="1080"></canvas>
+            <!-- Overlay canvas for interactive handles, wireframes, and corner pins -->
+            <canvas id="layer-interaction-canvas" width="1920" height="1080"></canvas>
+            
+            <div class="layer-loading-overlay hidden" id="layer-loading-overlay">
+              <span class="btn-spinner" style="width:32px; height:32px; border-width:3px;"></span>
+              <p id="layer-loading-text" style="color:var(--text-main); font-weight:600; margin:12px 0 0 0;">Decomposing Shot into Layers...</p>
+              <span style="font-size:0.75rem; color:var(--text-dim);">Isolating color keys & inpainting clean background</span>
+            </div>
+          </div>
+
+          <!-- Bottom Viewport Toolbar -->
+          <div class="layer-viewport-toolbar">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="toolbar-label">Mode:</span>
+              <button class="btn-ctrl btn-xs active" id="btn-layer-mode-pin" title="Corner Pin Perspective Mode">📌 4-Corner Pin</button>
+              <button class="btn-ctrl btn-xs" id="btn-layer-mode-move" title="Translate / Scale Mode">✋ Move & Scale</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px;">
+              <label class="toggle-checkbox" style="font-size:0.75rem; color:var(--text-muted); cursor:pointer;">
+                <input type="checkbox" id="chk-layer-show-ghost">
+                <span>Ghost Previs Overlay</span>
+              </label>
+              <label class="toggle-checkbox" style="font-size:0.75rem; color:var(--text-muted); cursor:pointer;">
+                <input type="checkbox" id="chk-layer-show-grid" checked>
+                <span>Grid & Wireframes</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Inspector & Layer Stack Sidebar -->
+        <div class="layer-inspector-sidebar">
+          <!-- Layer Stack -->
+          <div class="inspector-card">
+            <div class="inspector-header">
+              <span style="font-weight:700; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">Layers</span>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <button class="btn-xs btn-secondary" id="btn-import-layer-png" title="Import an external transparent PNG layer">+ Import PNG</button>
+                <input type="file" id="file-import-layer-png" accept="image/png" style="display:none;">
+                <span class="layer-count-badge" id="layer-count-badge">0 Layers</span>
+              </div>
+            </div>
+            <div class="layer-list" id="layer-stack-list">
+              <!-- Dynamically populated layer items -->
+            </div>
+          </div>
+
+          <!-- Active Layer Inspector -->
+          <div class="inspector-card" id="layer-selected-card">
+            <div class="inspector-header">
+              <span style="font-weight:700; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">Selected Layer</span>
+              <span class="badge-tech" id="selected-layer-key-badge" style="font-size:0.65rem;">#FF0000</span>
+            </div>
+            
+            <div class="selected-layer-body" id="selected-layer-body">
+              <div class="selected-asset-info">
+                <img id="selected-asset-thumb" src="" alt="Asset" class="selected-asset-thumb">
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <input type="text" id="selected-layer-name-input" class="text-input" placeholder="Layer Name" style="font-size:0.85rem; font-weight:600; padding:3px 6px; width:100%; background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.18); border-radius:4px; color:var(--text-main);" title="Click to rename layer">
+                  </div>
+                  <h4 id="selected-asset-name" style="display:none;">Asset Name</h4>
+                  <span id="selected-asset-category" style="font-size:0.72rem; color:var(--text-muted); text-transform:capitalize;">Consistent Asset</span>
+                </div>
+              </div>
+
+              <!-- Layer Stacking Order Quick Actions -->
+              <div class="layer-stack-order-bar" style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; padding:6px 8px; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.06); border-radius:4px;">
+                <span style="font-size:0.68rem; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Layer Depth:</span>
+                <div style="display:flex; gap:3px;">
+                  <button class="btn btn-secondary btn-xs" id="btn-layer-bring-top" title="Bring to Front / Top of Stack" style="font-size:0.68rem; padding:2px 6px;">⤒ Front</button>
+                  <button class="btn btn-secondary btn-xs" id="btn-layer-move-up" title="Bring Forward (Move Up in stack)" style="font-size:0.68rem; padding:2px 6px;">▲ Up</button>
+                  <button class="btn btn-secondary btn-xs" id="btn-layer-move-down" title="Send Backward (Move Down in stack)" style="font-size:0.68rem; padding:2px 6px;">▼ Down</button>
+                  <button class="btn btn-secondary btn-xs" id="btn-layer-send-bottom" title="Send to Back (Above Background)" style="font-size:0.68rem; padding:2px 6px;">⤓ Back</button>
+                </div>
+              </div>
+
+              <!-- Consistent Asset Assignment / Switcher -->
+              <div style="margin-top:10px;">
+                <label style="font-size:0.7rem; color:var(--text-dim); font-weight:700; text-transform:uppercase; letter-spacing:0.03em;">Assigned Consistent Asset:</label>
+                <select id="sel-layer-assigned-asset" class="select-input" style="width:100%; font-size:0.75rem; margin-top:4px; padding:5px 8px; background:rgba(0,0,0,0.4); border:1px solid var(--border-subtle); color:var(--text-main); border-radius:4px;">
+                </select>
+              </div>
+
+              <!-- GPT-Image-2.5 Flare Consistent 3D Perspective Generation -->
+              <div style="margin-top:12px; background:linear-gradient(135deg, rgba(245,158,11,0.08), rgba(0,240,255,0.05)); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <span style="font-size:0.72rem; font-weight:700; color:var(--accent-gold); text-transform:uppercase; letter-spacing:0.04em;">3D Consistent Angle (GPT Flare):</span>
+                  <span style="font-size:0.62rem; color:var(--accent-teal); font-weight:700; background:rgba(45,212,191,0.1); padding:1px 5px; border-radius:3px;">High Fidelity</span>
+                </div>
+                
+                <div style="margin-top:4px;">
+                  <select id="sel-layer-orientation" class="select-input" style="width:100%; font-size:0.75rem; padding:5px 8px; background:rgba(0,0,0,0.5); border:1px solid var(--border-subtle); color:var(--text-main); border-radius:4px;">
+                    <option value="Dynamic 3/4 perspective angle view, showing side profile, bow, and dorsal deck">Dynamic 3/4 Perspective Angle</option>
+                    <option value="Side profile elevation view, full lateral view">Side Profile Elevation</option>
+                    <option value="Front 3/4 angle view, facing forward toward camera highlighting hammerhead bow">Front 3/4 Bow View</option>
+                    <option value="Rear 3/4 angle view, showcasing aft thruster engines with bright orange exhaust plumes">Rear 3/4 Thrusters View</option>
+                    <option value="Top-down dorsal view showing entire deck layout and turret sponsons">Top-Down Dorsal View</option>
+                  </select>
+                </div>
+
+                <div style="margin-top:6px;">
+                  <input type="text" id="txt-layer-orientation-extra" class="text-input" placeholder="Extra angle prompt (optional)..." style="width:100%; font-size:0.72rem; padding:4px 8px; background:rgba(0,0,0,0.4); border:1px solid var(--border-subtle); border-radius:4px; color:var(--text-main);">
+                </div>
+
+                <button class="btn btn-primary btn-xs btn-glow" id="btn-regenerate-layer-asset" style="width:100%; margin-top:8px;" title="Generate 3D perspective asset with GPT-Image-2.5 Flare matching reference geometry">
+                  ✨ Generate 3D Consistent Asset
+                </button>
+              </div>
+
+              <!-- Opacity & Blend Mode -->
+              <div class="control-row" style="margin-top:10px;">
+                <label style="font-size:0.75rem; color:var(--text-muted);">Opacity</label>
+                <input type="range" id="selected-layer-opacity" min="0" max="1" step="0.05" value="1.0" class="styled-slider" style="flex:1; margin:0 8px;">
+                <span id="selected-layer-opacity-val" style="font-size:0.75rem; font-family:var(--font-mono); color:var(--text-muted); width:32px; text-align:right;">100%</span>
+              </div>
+
+              <!-- Perspective Controls -->
+              <div style="margin-top:8px; display:flex; gap:6px;">
+                <button class="btn btn-secondary btn-xs" id="btn-selected-reset-pins" style="flex:1;" title="Fit quad to full canvas">Fit to Canvas</button>
+                <button class="btn btn-secondary btn-xs" id="btn-selected-center" style="flex:1;" title="Center layer in frame">🎯 Center</button>
+              </div>
+
+              <!-- Export Layer Transparent PNG -->
+              <button class="btn btn-secondary btn-xs" id="btn-export-layer-png" style="width:100%; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:5px;" title="Download this layer as an isolated transparent PNG">
+                <span>⬇️ Export Transparent Layer (PNG)</span>
+              </button>
+
+              <!-- Layer Duplicate & Delete Actions -->
+              <div style="margin-top:8px; display:flex; gap:6px;">
+                <button class="btn btn-secondary btn-xs" id="btn-duplicate-layer" style="flex:1; display:flex; align-items:center; justify-content:center; gap:5px;" title="Duplicate this layer with all its properties">
+                  <span>❐ Duplicate Layer</span>
+                </button>
+                <button class="btn btn-secondary btn-xs" id="btn-delete-layer" style="flex:1; display:flex; align-items:center; justify-content:center; gap:5px; color:var(--accent-rose);" title="Delete this layer from shot">
+                  <span>🗑️ Delete Layer</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="no-layer-selected-notice" class="hidden" style="padding:20px; text-align:center; color:var(--text-dim); font-size:0.82rem;">
+              Select a layer to adjust its perspective, swap assigned asset, or export.
+            </div>
+          </div>
+
+          <!-- Harmonization & Commit Panel -->
+          <div class="inspector-card">
+            <div class="inspector-header">
+              <span style="font-weight:700; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">Style Harmonization</span>
+              <span id="harmony-strength-val" style="font-size:0.75rem; font-family:var(--font-mono); color:var(--accent-teal);">20% Polish</span>
+            </div>
+            <div style="padding:10px 12px;">
+              <input type="range" id="harmony-strength-slider" min="0" max="0.40" step="0.02" value="0.20" class="styled-slider" style="width:100%;">
+              <div style="display:flex; justify-content:space-between; font-size:0.65rem; color:var(--text-dim); margin-top:4px;">
+                <span>0% (Raw)</span>
+                <span>20% (Subtle Polish)</span>
+                <span>40% (Painterly Blend)</span>
+              </div>
+              <p style="font-size:0.72rem; color:var(--text-muted); margin:8px 0 10px 0; line-height:1.4;">
+                Harmonizes contact edges, brush impasto, and rim highlights across all perspective-warped layers.
+              </p>
+              <button class="btn btn-primary btn-sm btn-glow" id="btn-layer-commit-footer" style="width:100%;">
+                ✨ Harmonize & Save Keyframe
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="modal-backdrop hidden" id="preview-clip-modal">
+    <div class="modal-card" style="max-width: 680px;">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="icon-indicator">🎬</span>
+          <h3 id="preview-modal-title">Shot Preview</h3>
+        </div>
+        <button class="btn-icon" id="close-preview-modal-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <video id="modal-video-player" controls playsinline class="modal-preview-video"></video>
+        
+        <div class="preview-meta-details" style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
+          <div>
+            <span style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">Shot Description & Action:</span>
+            <p id="modal-video-desc" class="modal-desc" style="margin-top:2px; font-size:0.82rem; line-height:1.4; color:var(--text-main);"></p>
+          </div>
+          
+          <div style="background:rgba(0,0,0,0.35); border:1px solid var(--border-subtle); border-radius:6px; padding:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="font-size:0.72rem; font-weight:700; color:var(--accent-cyan); text-transform:uppercase; letter-spacing:0.04em;">Video Generation Prompt (Dispatched to Model):</span>
+              <span id="modal-provider-badge" class="badge-tech" style="font-size:0.65rem;">Fal.ai</span>
+            </div>
+            <p id="modal-video-prompt" style="font-size:0.78rem; font-family:var(--font-mono); color:#cbd5e1; word-break:break-word; margin:0; line-height:1.4;"></p>
+          </div>
+
+          <div id="modal-keyframes-compare" class="hidden" style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+            <div style="flex:1;">
+              <span id="modal-orig-kf-label" style="font-size:0.65rem; color:var(--text-dim); display:block; margin-bottom:3px;">1. Spatial Previs</span>
+              <img id="modal-orig-kf-img" src="" alt="Spatial Previs Frame" style="width:100%; height:75px; object-fit:cover; border-radius:4px; border:1px solid var(--border-subtle);">
+            </div>
+            <div style="flex:1;" id="modal-color-kf-col">
+              <span id="modal-color-kf-label" style="font-size:0.65rem; color:#fbbf24; display:block; margin-bottom:3px;">2. True Color Pass</span>
+              <img id="modal-color-kf-img" src="" alt="True Color Frame" style="width:100%; height:75px; object-fit:cover; border-radius:4px; border:1px solid rgba(245,158,11,0.4);">
+            </div>
+            <div style="flex:1;">
+              <span id="modal-styled-kf-label" style="font-size:0.65rem; color:var(--accent-teal); display:block; margin-bottom:3px;">3. Regened KF</span>
+              <img id="modal-styled-kf-img" src="" alt="Styled Keyframe" style="width:100%; height:75px; object-fit:cover; border-radius:4px; border:1px solid rgba(20,184,166,0.4);">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="close-preview-modal-footer-btn">Close</button>
+        <button class="btn btn-primary" id="btn-modal-add-timeline">Add to Timeline</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Video Modal -->
+  <div class="modal-backdrop hidden" id="export-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="icon-indicator">🚀</span>
+          <h3>Export Long Format Video</h3>
+        </div>
+        <button class="btn-icon" id="close-export-modal-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="modal-desc">PointBlank will use the local FFmpeg engine to stitch and encode all timeline clips into a single high-definition video matching your chosen resolution.</p>
+
+        <div class="modal-summary-box">
+          <div class="summary-item">
+            <span class="label">Clips in Sequence:</span>
+            <span class="val" id="modal-clip-count">0</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">Total Duration:</span>
+            <span class="val highlight" id="modal-total-duration">00:00.0</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="export-res-select">Export Resolution</label>
+          <select id="export-res-select" class="select-input">
+            <option value="1280x720">720p HD (Fastest)</option>
+            <option value="1920x1080" selected>1080p Full HD (Recommended)</option>
+            <option value="1080x1920">1080x1920 Vertical (Reel / Shorts)</option>
+          </select>
+        </div>
+
+        <!-- Render Progress -->
+        <div class="export-progress-box hidden" id="export-progress-box">
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" id="export-progress-bar"></div>
+          </div>
+          <span class="progress-text" id="export-progress-text">Encoding with local FFmpeg...</span>
+        </div>
+
+        <!-- Export Result -->
+        <div class="export-result-card hidden" id="export-result-card">
+          <div class="result-success-banner">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>Master Video Successfully Exported!</span>
+          </div>
+          <video id="export-preview-player" controls playsinline class="export-preview-video"></video>
+          <a id="export-download-link" href="#" download="master_video.mp4" class="btn btn-primary btn-glow btn-full">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>Download Full Video (MP4)</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="modal-footer" id="export-modal-footer">
+        <button class="btn btn-secondary" id="cancel-export-btn">Cancel</button>
+        <button class="btn btn-primary btn-glow" id="start-stitch-export-btn">
+          <span>Start Stitching & Export</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings / API Keys Modal -->
+  <div class="modal-backdrop hidden" id="settings-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="icon-indicator">⚙️</span>
+          <h3>API Keys & Model Integrations</h3>
+        </div>
+        <button class="btn-icon" id="close-settings-modal-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Video Model Provider Selector -->
+        <div class="form-group">
+          <label for="settings-video-provider">Active Video Engine</label>
+          <select id="settings-video-provider" class="select-input">
+            <option value="fal" selected>Fal.ai Studio Gateway (Wan 2.1, Kling 1.6, Minimax, Flux)</option>
+            <option value="kling">Direct Kling AI (Pro Camera Motion)</option>
+            <option value="simulator">Studio Simulator (Local Free - Instant Testing)</option>
+            <option value="custom">Custom Endpoint</option>
+          </select>
+          <span class="hint-text">Select your neural video diffusion engine. Fal.ai provides cloud A100/H100 generation for Wan 2.1, Kling, Minimax, and Flux restyling.</span>
+        </div>
+
+        <!-- Fal.ai API Key -->
+        <div class="form-group" id="fal-key-group">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 6px;">
+            <label for="settings-fal-key" style="margin-bottom:0;">Fal.ai API Key (Universal Video & Restyle Gateway)</label>
+            <span id="fal-key-status-badge" class="badge hidden" style="font-size:0.7rem;"></span>
+          </div>
+          <div style="position:relative; display:flex; align-items:center;">
+            <input type="password" id="settings-fal-key" class="text-input" placeholder="Enter FAL_KEY (e.g. fal_key_...)" style="padding-right: 40px;">
+            <button type="button" id="btn-toggle-fal-key-vis" class="btn-icon" style="position:absolute; right:8px; background:none; border:none; cursor:pointer; font-size:0.9rem;" title="Toggle key visibility">👁️</button>
+          </div>
+          <span class="hint-text">From fal.ai/dashboard/keys. Powers Keyframe Restyling (Pass 1) and Video Diffusion (Pass 2).</span>
+        </div>
+
+        <!-- Keyframe Restyle Model Selector (Pass 1 - Image-to-Image) -->
+        <div class="form-group" id="restyle-model-group">
+          <label for="settings-restyle-model">🎨 Full-Shot Restyling Engine (Pass 1 - Image-to-Image / Style Anchor)</label>
+          <select id="settings-restyle-model" class="select-input">
+            <option value="fal-ai/nano-banana-pro/edit" selected>Nano Banana Pro (Recommended — SOTA Visual Anchor Style Bible & Multimodal Reasoning)</option>
+            <option value="fal-ai/flux-pro/v1.1-ultra">FLUX.1.1 [pro] Ultra (Cinematic & Photographic Detailing)</option>
+            <option value="fal-ai/flux-general/image-to-image">FLUX.1 [dev] + Neural IP-Adapter (Legacy Turnarounds)</option>
+            <option value="fal-ai/flux/dev/image-to-image">FLUX.1 [dev] Standard Img2Img (Direct Prompt Transfer)</option>
+            <option value="fal-ai/flux-lora/image-to-image">FLUX.1 [dev] with LoRA Stack (Applies Style Bible LoRAs)</option>
+            <option value="fal-ai/fast-sdxl/image-to-image">SDXL Fast Img2Img (Low Latency / High Speed)</option>
+          </select>
+          <span class="hint-text">Used for Shot Keyframe Restyling (Pass 1). Nano Banana Pro strictly applies the Style Bible from your Visual Anchor while preserving 3D camera layout and Consistent Assets.</span>
+        </div>
+
+        <!-- 3D Asset Generation Model Selector (Layer Studio) -->
+        <div class="form-group" id="asset-gen-model-group">
+          <label for="settings-asset-gen-model">🛸 3D Asset Generation Engine (Layer Studio)</label>
+          <select id="settings-asset-gen-model" class="select-input">
+            <option value="openai/gpt-image-2.5/flare/edit" selected>OpenAI GPT-Image-2.5 Flare (Recommended — 3D Camera Angles & 100% Model Sheet Retention)</option>
+            <option value="fal-ai/nano-banana-pro/edit">Nano Banana Pro (Multimodal 3D Reasoning & Perspective Synthesis)</option>
+            <option value="fal-ai/flux-general">FLUX.1 [dev] + XLabs IP-Adapter (Diffusion Latent Approximation)</option>
+          </select>
+          <span class="hint-text">Used when generating camera-rotated 3D asset layers from turnaround reference sheets in the Layer Studio. Automatically matted to transparent PNG.</span>
+        </div>
+
+        <!-- Style Harmonization Model Selector (Layer Studio Bake) -->
+        <div class="form-group" id="harmonize-model-group">
+          <label for="settings-harmonize-model">✨ Style Harmonization Engine (Layer Studio Bake)</label>
+          <select id="settings-harmonize-model" class="select-input">
+            <option value="fal-ai/nano-banana-pro/edit" selected>Nano Banana Pro (Recommended — 3D Lighting, Volumetric Haze & Style Bible Integration)</option>
+            <option value="fal-ai/iclight-v2">IC-Light V2 (Photometric Normal-Based Relighting)</option>
+            <option value="fal-ai/flux/dev/image-to-image">FLUX.1 [dev] Subtle Polish (Img2Img Canvas Grain at 0.20 Denoise)</option>
+            <option value="raw">Raw Composite Only (100% Faithful Layer Composite — No Model Pass)</option>
+          </select>
+          <span class="hint-text">Used when baking multi-layer composites in the Layer Studio to integrate rim lighting, edge contact, and Style Bible impasto across layers.</span>
+        </div>
+
+        <!-- Video Model Selector (Pass 2 - Image-to-Video) -->
+        <div class="form-group" id="fal-model-group">
+          <label for="settings-fal-model">🎬 Video Generation Engine (Image-to-Video / Motion Diffusion)</label>
+          <select id="settings-fal-model" class="select-input">
+            <option value="bytedance/seedance-2.5/image-to-video" selected>ByteDance Seedance 2.5 Image-to-Video (Anchored Frame 0 Keyframe & Native Audio)</option>
+            <option value="fal-ai/wan-i2v">Wan 2.1 14B Image-to-Video (SOTA Motion & Art Fidelity; Auto FLF2V)</option>
+            <option value="bytedance/seedance-2.5/reference-to-video">ByteDance Seedance 2.5 Reference-to-Video (Multimodal Loose References)</option>
+            <option value="fal-ai/kling-video/v1.6/pro/image-to-video">Kling 1.6 Pro (Complex 3D Camera Trajectories & Rigid Physics)</option>
+            <option value="fal-ai/kling-video/v1.6/standard/image-to-video">Kling 1.6 Standard (Fast Turnaround)</option>
+            <option value="fal-ai/minimax/video-01/image-to-video">Minimax Video-01 / Hailuo (Expressive Character Motion)</option>
+            <option value="fal-ai/luma-dream-machine">Luma Dream Machine (Ray 2 Cinematic Lighting)</option>
+          </select>
+          <span class="hint-text">Used for Shot Clip Generation (Pass 2). Seedance 2.5 Image-to-Video anchors Frame 0 strictly to your Restyled Keyframe with synchronized audio.</span>
+        </div>
+
+        <!-- Kling AI API Keys -->
+        <div class="form-group" id="kling-keys-group">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 6px;">
+            <label for="settings-kling-access-key" style="margin-bottom:0;">Direct Kling AI Access Key & Secret Key (Optional)</label>
+            <span id="kling-key-status-badge" class="badge hidden" style="font-size:0.7rem;"></span>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <input type="password" id="settings-kling-access-key" class="text-input" placeholder="Access Key">
+            <input type="password" id="settings-kling-secret-key" class="text-input" placeholder="Secret Key">
+          </div>
+          <span class="hint-text">From api.klingai.com. Optional direct connection if not using Fal.ai gateway.</span>
+        </div>
+
+        <!-- ElevenLabs API Key -->
+        <div class="form-group" id="elevenlabs-key-group">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 6px;">
+            <label for="settings-elevenlabs-key" style="margin-bottom:0;">ElevenLabs API Key</label>
+            <span id="elevenlabs-key-status-badge" class="badge hidden" style="font-size:0.7rem;"></span>
+          </div>
+          <input type="password" id="settings-elevenlabs-key" class="text-input" placeholder="xi_...">
+          <span class="hint-text">Cinematic Sound Effects (SFX) and Character Dialogue / Voiceover generation.</span>
+        </div>
+
+        <div class="form-group hidden" id="video-api-key-group">
+          <label for="settings-video-key">Secondary Video Provider API Key (Optional)</label>
+          <input type="password" id="settings-video-key" class="text-input" placeholder="Optional key">
+        </div>
+
+        <div class="form-group hidden" id="custom-endpoint-group">
+          <label for="settings-custom-endpoint">Custom Video Endpoint</label>
+          <input type="text" id="settings-custom-endpoint" class="text-input" placeholder="https://api.yourprovider.com/v1/generate">
+        </div>
+
+        <div id="settings-feedback" class="feedback-msg hidden"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-settings-btn">Close</button>
+        <button class="btn btn-primary" id="save-settings-btn">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reference Asset Create / Edit Modal -->
+  <div class="modal-backdrop hidden" id="reference-asset-modal">
+    <div class="modal-card" style="max-width: 620px;">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="icon-indicator" id="ref-modal-icon">👤</span>
+          <h3 id="ref-modal-title">New Reference Asset</h3>
+        </div>
+        <button class="btn-icon" id="close-ref-modal-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="ref-edit-id" value="">
+
+        <!-- Category Selector -->
+        <div class="form-group">
+          <label>Asset Category</label>
+          <div class="ref-cat-selector">
+            <label class="ref-cat-option">
+              <input type="radio" name="ref-category" value="characters" checked>
+              <span>👤 Character</span>
+            </label>
+            <label class="ref-cat-option">
+              <input type="radio" name="ref-category" value="props">
+              <span>📦 Prop / Vehicle</span>
+            </label>
+            <label class="ref-cat-option">
+              <input type="radio" name="ref-category" value="places">
+              <span>📍 Place / Environment</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Name & Tag -->
+        <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label for="ref-name-input">Asset Name</label>
+            <input type="text" id="ref-name-input" class="text-input" placeholder="e.g. Commander Elena">
+          </div>
+          <div class="form-group">
+            <label for="ref-tag-input">Mention Tag</label>
+            <input type="text" id="ref-tag-input" class="text-input" placeholder="e.g. @Elena">
+          </div>
+        </div>
+
+        <!-- Color Key Identification for Spatial Previs -->
+        <div class="form-group" style="margin-bottom:14px; background: rgba(15,23,42,0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+            <label for="ref-color-key-input" style="margin-bottom:0; font-weight:600; font-size:0.8rem; display:flex; align-items:center; gap:6px;">
+              <span>🎯 Spatial Previs Color Key</span>
+              <span style="font-size:0.7rem; color:var(--text-dim); font-weight:normal;">(For 3D blocking detection)</span>
+            </label>
+            <div id="ref-color-preview-badge" style="display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:0.75rem; padding: 2px 8px; border-radius: 4px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);">
+              <span id="ref-color-preview-dot" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:transparent; border:1px solid rgba(255,255,255,0.3);"></span>
+              <span id="ref-color-preview-text" style="color:var(--text-dim);">None</span>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="color" id="ref-color-picker" value="#FF0000" style="width:36px; height:32px; border:none; border-radius:6px; cursor:pointer; background:transparent;">
+            <input type="text" id="ref-color-key-input" class="text-input" placeholder="#FF0000 (pure red) or pick preset below" style="flex:1; height:32px; font-family:var(--font-mono); font-size:0.8rem;">
+          </div>
+          <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+            <button type="button" class="btn-xs btn-color-swatch" data-color="#FF0000" style="background:rgba(255,0,0,0.15); border:1px solid #FF0000; color:#FF6B6B;">🔴 Red (#FF0000)</button>
+            <button type="button" class="btn-xs btn-color-swatch" data-color="#00FF00" style="background:rgba(0,255,0,0.15); border:1px solid #00FF00; color:#51CF66;">🟢 Green (#00FF00)</button>
+            <button type="button" class="btn-xs btn-color-swatch" data-color="#00F0FF" style="background:rgba(0,240,255,0.15); border:1px solid #00F0FF; color:#33D9E8;">🔵 Cyan (#00F0FF)</button>
+            <button type="button" class="btn-xs btn-color-swatch" data-color="#FFFF00" style="background:rgba(255,255,0,0.15); border:1px solid #FFFF00; color:#FCC419;">🟡 Yellow (#FFFF00)</button>
+            <button type="button" class="btn-xs btn-color-swatch" data-color="#FF00FF" style="background:rgba(255,0,255,0.15); border:1px solid #FF00FF; color:#F06595;">🟣 Magenta (#FF00FF)</button>
+            <button type="button" class="btn-xs btn-color-swatch" data-color="#FFA500" style="background:rgba(255,165,0,0.15); border:1px solid #FFA500; color:#FF922B;">🟠 Orange (#FFA500)</button>
+            <button type="button" class="btn-xs btn-color-swatch" data-color="" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:var(--text-dim);">✕ Clear</button>
+          </div>
+        </div>
+
+        <!-- Character Specific Anchor Fields -->
+        <div id="ref-character-fields" class="ref-sub-fields" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="ref-wardrobe-input">🥋 Costume & Wardrobe</label>
+            <input type="text" id="ref-wardrobe-input" class="text-input" placeholder="e.g. Weathered leather jacket, dark cargo pants, tactical boots">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="ref-hair-input">💇 Hair, Face & Identity</label>
+            <input type="text" id="ref-hair-input" class="text-input" placeholder="e.g. Messy dark hair, angular jawline, silver earring">
+          </div>
+        </div>
+
+        <!-- Place / Environment Specific Anchor Fields -->
+        <div id="ref-place-fields" class="ref-sub-fields hidden" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="ref-architecture-input">🏛️ Architecture & Set Layout</label>
+            <input type="text" id="ref-architecture-input" class="text-input" placeholder="e.g. Brutalist concrete hangar, circular glass dome">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="ref-atmosphere-input">🌫️ Ambient Atmosphere & Fog</label>
+            <input type="text" id="ref-atmosphere-input" class="text-input" placeholder="e.g. Cold blue volumetric fog, neon amber practical lamps">
+          </div>
+        </div>
+
+        <!-- Image Upload Area -->
+        <div class="form-group">
+          <label>Reference Image (Visual Ground Truth)</label>
+          <div class="ref-upload-dropzone" id="ref-upload-dropzone">
+            <input type="file" id="ref-image-file-input" accept="image/*" class="file-input-hidden">
+            <div id="ref-dropzone-empty" class="ref-dropzone-inner">
+              <span style="font-size:1.6rem;">🖼️</span>
+              <span style="font-size:0.8rem; font-weight:600; color:var(--text-main);">Click or Drag to Upload Reference Image</span>
+              <span style="font-size:0.7rem; color:var(--text-dim);">PNG, JPG, or WEBP up to 20MB</span>
+            </div>
+            <div id="ref-dropzone-preview" class="ref-dropzone-preview hidden">
+              <img id="ref-preview-img" src="" alt="Preview">
+              <button type="button" class="btn-xs btn-secondary" id="btn-remove-ref-img">Change Image</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Consistency Description -->
+        <div class="form-group">
+          <label for="ref-desc-input">Visual Consistency Description</label>
+          <textarea id="ref-desc-input" class="text-input" rows="3" placeholder="Describe the distinctive physical characteristics, clothing, hair, markings, colors, materials, or lighting rules that must stay consistent across shots..."></textarea>
+          <span class="hint-text">This description will be injected into prompts whenever this asset is tagged in a shot.</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-ref-modal-btn">Cancel</button>
+        <button class="btn btn-primary btn-glow" id="save-ref-btn">Save Reference Asset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign References to Shot Modal -->
+  <div class="modal-backdrop hidden" id="assign-references-modal">
+    <div class="modal-card" style="max-width: 560px;">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="icon-indicator">🏷️</span>
+          <h3 id="assign-modal-title">Assign Reference Assets to Shot</h3>
+        </div>
+        <button class="btn-icon" id="close-assign-modal-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc" style="margin-bottom:12px;">Select the Characters, Props, and Places active in this shot. Their visual references and descriptions will be used to enforce shot-to-shot consistency during generation.</p>
+        <div id="assign-refs-checklist" class="assign-refs-checklist">
+          <!-- Dynamically populated list of references with checkboxes -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-assign-modal-btn">Cancel</button>
+        <button class="btn btn-primary" id="save-assign-refs-btn">Apply to Shot</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transition Settings Modal (Timeline Cut / Dissolve / Fade to Black / Wipe) -->
+  <div class="modal-backdrop hidden" id="transition-modal">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="icon-indicator">🔀</span>
+          <h3>Shot Transition Settings</h3>
+        </div>
+        <button class="btn-icon" id="close-transition-modal-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc" style="margin-bottom:14px;">Select the cinematic transition between these two timeline clips.</p>
+        
+        <div class="form-group">
+          <label for="trans-type-select">Transition Type</label>
+          <select id="trans-type-select" class="text-input">
+            <option value="cut">✂️ Direct Cut (No Blend)</option>
+            <option value="dissolve" selected>🔀 Cross Dissolve (Smooth Blend)</option>
+            <option value="fadeblack">🌓 Fade to Black</option>
+            <option value="fadewhite">☀️ Fade to White</option>
+            <option value="wipeleft">⬅️ Wipe Left</option>
+            <option value="wiperight">➡️ Wipe Right</option>
+            <option value="circleopen">⭕ Circle Open</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="trans-duration-group">
+          <label for="trans-duration-input">Duration</label>
+          <div class="input-with-unit">
+            <input type="number" id="trans-duration-input" min="0.1" max="2.5" step="0.1" value="0.8">
+            <span>sec</span>
+          </div>
+          <span class="hint-text">Duration of the visual transition overlap rendered via FFmpeg xfade.</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-transition-modal-btn">Cancel</button>
+        <button class="btn btn-primary btn-glow" id="save-transition-modal-btn">Apply Transition</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Spatial Continuity Ledger Modal -->
+  <div class="modal-backdrop hidden" id="modal-spatial-continuity">
+    <div class="modal-card" style="max-width: 620px;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1.2rem;">📐</span>
+          <div>
+            <h3 id="spatial-modal-title">Spatial Continuity Ledger</h3>
+            <span class="modal-subtitle" id="spatial-modal-subtitle">Configure 180° rule, pixel motion vectors, eyeline matching, and lighting vectors</span>
+          </div>
+        </div>
+        <button class="btn-icon" id="close-spatial-modal-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.2); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:0.75rem; color:var(--text-secondary); line-height:1.4;">
+          💡 <strong>Spatial Ground Truth:</strong> These spatial vectors and camera parameters are compiled directly into the diffusion prompt and keyframe composite, locking the video generation to the exact perspective and action of the restyled keyframe.
+        </div>
+
+        <!-- Row 1: Motion Vector & Camera Movement -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="spatial-motion-vector-input">🏃‍♂️ Subject Motion Vector & Action</label>
+            <input type="text" id="spatial-motion-vector-input" class="text-input" placeholder="e.g. Descending diagonally screen-right through clouds, thrusters firing">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="spatial-camera-traj-select">🎥 Camera Tracking Trajectory</label>
+            <select id="spatial-camera-traj-select" class="text-input">
+              <option value="Dolly Forward">Dolly Forward</option>
+              <option value="Crane Down">Crane Down (Tracking Descent)</option>
+              <option value="Pan Right">Pan Right</option>
+              <option value="Pan Left">Pan Left</option>
+              <option value="Slow Zoom In">Slow Zoom In</option>
+              <option value="Orbit 360">Orbit 360°</option>
+              <option value="Side Tracking Alongside Subject">Side Tracking Alongside Subject</option>
+              <option value="Static Cinematic">Static Cinematic</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 2: Subject Screen Position & Facing -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="spatial-pos-select">📍 Subject Screen Position</label>
+            <select id="spatial-pos-select" class="text-input">
+              <option value="Center">Center</option>
+              <option value="Screen-Left">Screen-Left</option>
+              <option value="Screen-Right">Screen-Right</option>
+              <option value="Upper-Left">Upper-Left</option>
+              <option value="Upper-Right">Upper-Right</option>
+              <option value="Lower-Left">Lower-Left</option>
+              <option value="Lower-Right">Lower-Right</option>
+              <option value="Mid-Right Descending">Mid-Right Descending</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="spatial-facing-select">🧭 Subject Facing / Perspective</label>
+            <select id="spatial-facing-select" class="text-input">
+              <option value="3/4 Profile Right">3/4 Profile Right</option>
+              <option value="3/4 Profile Left">3/4 Profile Left</option>
+              <option value="Screen-Right">Screen-Right (Side View)</option>
+              <option value="Screen-Left">Screen-Left (Side View)</option>
+              <option value="Forward">Forward (Direct to Lens)</option>
+              <option value="Back to Camera">Back to Camera (Chasing Behind)</option>
+              <option value="3/4 High Angle Dorsal">3/4 High Angle Dorsal View</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 3: Eyeline & Camera Framing -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="spatial-eyeline-input">👁️ Eyeline / Trajectory Heading</label>
+            <input type="text" id="spatial-eyeline-input" class="text-input" placeholder="e.g. Looking Screen-Right, Down toward moon surface">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="spatial-angle-input">📐 Camera Framing & Optics</label>
+            <input type="text" id="spatial-angle-input" class="text-input" placeholder="e.g. 3/4 High Angle Profile 50mm, Medium Shot 50mm">
+          </div>
+        </div>
+
+        <!-- Row 4: Lighting Vector -->
+        <div class="form-group" style="margin-bottom:12px;">
+          <label for="spatial-lighting-input">💡 Key Light Vector & Atmosphere</label>
+          <input type="text" id="spatial-lighting-input" class="text-input" placeholder="e.g. Dramatic Sunset Backlighting from Screen-Right (warm orange rim light)">
+        </div>
+
+        <!-- Row 5: 180° Rule & Continuity Axis -->
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="spatial-axis-input">⚖️ 180° Rule & Continuity Axis Directive</label>
+          <input type="text" id="spatial-axis-input" class="text-input" placeholder="e.g. Maintain East Axis - craft descends screen-right across cuts">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-spatial-modal-btn">Cancel</button>
+        <button class="btn btn-primary btn-glow" id="save-spatial-modal-btn">Save Spatial Ledger</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ElevenLabs Cinematic Audio Engine Modal (SFX & Dialogue) -->
+  <div class="modal-backdrop hidden" id="modal-audio-engine">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1.3rem;">🔊</span>
+          <div>
+            <h3 id="audio-modal-title">Cinematic Audio Studio</h3>
+            <span class="modal-subtitle" id="audio-modal-subtitle">Generate Sound Effects & Character Dialogue via ElevenLabs</span>
+          </div>
+        </div>
+        <button class="btn-icon" id="close-audio-modal-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Audio Mode Selector -->
+        <div class="ref-cat-selector" style="margin-bottom:14px;">
+          <label class="ref-cat-option">
+            <input type="radio" name="audio-mode" value="sfx" checked>
+            <span>💥 Sound Effects (SFX)</span>
+          </label>
+          <label class="ref-cat-option">
+            <input type="radio" name="audio-mode" value="dialogue">
+            <span>🎙️ Dialogue / Voiceover</span>
+          </label>
+        </div>
+
+        <!-- SFX Generation Section -->
+        <div id="audio-sfx-section">
+          <div class="form-group">
+            <label for="audio-sfx-prompt">Sound Effect Description</label>
+            <textarea id="audio-sfx-prompt" class="text-input" rows="3" placeholder="e.g. Heavy cybernetic footsteps splashing in rainy alley, distant sirens, humming electric neon transformer"></textarea>
+            <span class="hint-text">Describe the ambient sounds, impacts, mechanical textures, and spatial acoustics.</span>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="audio-sfx-duration">Duration</label>
+              <div class="input-with-unit">
+                <input type="number" id="audio-sfx-duration" min="1" max="11" step="0.5" value="4">
+                <span>sec</span>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="audio-sfx-influence">Prompt Influence</label>
+              <input type="range" id="audio-sfx-influence" min="0.1" max="1" step="0.1" value="0.3" style="width:100%; margin-top:8px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Dialogue Generation Section -->
+        <div id="audio-dialogue-section" class="hidden">
+          <div class="form-group">
+            <label for="audio-voice-select">Narrator / Character Voice</label>
+            <select id="audio-voice-select" class="text-input">
+              <option value="pNInz6obpgDQGcFmaJgB">Adam (Deep Cinematic & Trailer)</option>
+              <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Calm & Intimate)</option>
+              <option value="ErXwobaYiN019PkySvjV">Antoni (Epic Storytelling)</option>
+              <option value="AZnzlk1XvdvUeBnXmlld">Domi (Strong & Confident)</option>
+              <option value="EXAVITQu4vr4xnSDxMaL">Bella (Expressive)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="audio-dialogue-text">Spoken Dialogue / Voiceover Line</label>
+            <textarea id="audio-dialogue-text" class="text-input" rows="3" placeholder="e.g. In a city built on neon and static, the only truth is the angle of your weapon."></textarea>
+          </div>
+        </div>
+
+        <!-- Existing Shot Audio Tracks List -->
+        <div style="margin-top:16px;">
+          <label style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px; display:block;">Active Shot Audio Stems</label>
+          <div id="audio-tracks-list" style="display:flex; flex-direction:column; gap:6px;">
+            <div style="font-size:0.75rem; color:var(--text-dim); font-style:italic;">No audio tracks attached yet.</div>
+          </div>
+        </div>
+
+        <div id="audio-feedback-msg" class="feedback-msg hidden" style="margin-top:10px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-audio-modal-btn">Close</button>
+        <button class="btn btn-primary btn-glow" id="btn-generate-audio">
+          <span>🔊 Generate & Attach to Shot</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footage Library & Manual Take Assignment Modal -->
+  <div class="modal-backdrop hidden" id="modal-footage-library">
+    <div class="modal-card" style="max-width: 840px; width: 95%;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.3rem;">📁</span>
+          <div>
+            <h3 id="footage-modal-title">Assign Take from Footage Library</h3>
+            <span class="modal-subtitle" id="footage-modal-subtitle">Assign an existing generation from your library or upload an external video file as a new Take</span>
+          </div>
+        </div>
+        <button class="btn-icon" id="close-footage-modal-btn">✕</button>
+      </div>
+      <div class="modal-body" style="gap:14px; max-height: 75vh;">
+        <!-- Upload Dropzone Row -->
+        <div class="footage-upload-dropzone" id="footage-upload-dropzone">
+          <input type="file" id="footage-file-input" accept="video/mp4,video/quicktime,video/webm" style="display:none;">
+          <div style="display:flex; align-items:center; justify-content:center; gap:12px; padding:14px 18px;">
+            <span style="font-size:1.6rem;">⬆️</span>
+            <div>
+              <div style="font-size:0.86rem; font-weight:700; color:var(--text-primary);">Upload Local Video File as New Take</div>
+              <div style="font-size:0.74rem; color:var(--text-muted);">Drop MP4, MOV, or WebM here, or <button type="button" class="btn-link-inline" id="btn-browse-footage" style="color:var(--accent-cyan); text-decoration:underline; background:none; border:none; cursor:pointer; font-size:inherit; font-weight:inherit; padding:0;">browse from your computer</button></div>
+            </div>
+            <div id="footage-upload-spinner" class="hidden" style="margin-left:auto; display:flex; align-items:center; gap:6px; font-size:0.75rem; color:var(--accent-cyan);">
+              <span class="btn-spinner"></span>
+              <span>Uploading & Processing Duration...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search / Filter & Count Header -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:4px;">
+          <div style="display:flex; align-items:center; gap:8px; flex:1;">
+            <input type="text" id="footage-search-input" class="text-input" placeholder="🔍 Search library clips by filename, model, or status..." style="font-size:0.78rem; padding:6px 12px; max-width:340px;">
+            <span id="footage-count-label" style="font-size:0.72rem; color:var(--text-muted);">0 clips available</span>
+          </div>
+          <button class="btn btn-xs btn-secondary" id="btn-refresh-footage" title="Refresh clips from disk">🔄 Refresh</button>
+        </div>
+
+        <!-- Footage Library Cards Grid -->
+        <div id="footage-library-grid" class="footage-library-grid">
+          <!-- Populated dynamically via StudioApp.loadFootageLibrary -->
+          <div style="text-align:center; padding:30px; color:var(--text-dim); font-size:0.85rem;">
+            <span class="btn-spinner"></span> Loading library clips...
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <span style="font-size:0.72rem; color:var(--text-dim);">Assigning will append a new Take T{N} and set it as active without overwriting existing takes.</span>
+        <button class="btn btn-secondary" id="cancel-footage-modal-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating @mention Autocomplete Dropdown for Storyboard textareas -->
+  <div id="at-mention-dropdown" class="at-mention-dropdown hidden"></div>
+
+  <!-- Studio Shutdown Overlay -->
+  <div class="shutdown-overlay hidden" id="shutdown-overlay">
+    <div class="shutdown-dialog">
+      <div class="shutdown-icon-wrap">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+          <line x1="12" y1="2" x2="12" y2="12"></line>
+        </svg>
+      </div>
+      <h2>Point Blank Studio Shut Down</h2>
+      <p id="shutdown-status-message">Point Blank Studio server and all background services have terminated cleanly.</p>
+      <div class="shutdown-subtext">You can now safely close this browser window.</div>
+    </div>
+  </div>
+
+  <script src="app.js?v=1792078"></script>
+</body>
+</html>

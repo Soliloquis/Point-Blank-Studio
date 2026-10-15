@@ -1,0 +1,15 @@
+{
+  "videoProvider": "fal",
+  "videoApiKey": "",
+  "klingAccessKey": "",
+  "klingSecretKey": "",
+  "falApiKey": "",
+  "falModel": "bytedance/seedance-2.5/image-to-video",
+  "falRestyleModel": "fal-ai/flux-general/image-to-image",
+  "assetGenModel": "openai/gpt-image-2.5/flare/edit",
+  "harmonizeModel": "fal-ai/nano-banana-pro/edit",
+  "elevenLabsApiKey": "",
+  "openaiApiKey": "",
+  "geminiApiKey": "",
+  "customEndpoint": ""
+}
