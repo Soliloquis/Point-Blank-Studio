@@ -66,3 +66,9 @@ Point Blank Studio is designed as a secure local desktop application with built-
 - **Upload Whitelisting & Size Limits**: Upload endpoints enforce strict MIME and extension whitelists (standard media formats only) with payload size limits to prevent arbitrary file execution.
 - **Credentials Protection**: API keys are securely stored locally, masked in client-facing payloads, and never committed to version control.
 
+---
+
+## 📄 License
+
+Point Blank Studio is distributed under the [MIT License](file:///c:/_PersonalProjects/PointBlank/LICENSE). Feel free to use, modify, distribute, and build upon this project.
+
