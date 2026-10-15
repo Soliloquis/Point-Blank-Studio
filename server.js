@@ -15,10 +15,42 @@ const { extractShotLayers, regenerateLayerAsset, getCanonicalAssetSprite, bakeAn
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 
-app.use(cors());
+// Security: Restrict Cross-Origin Requests strictly to Localhost / Local Studio App
+const allowedLocalhostRegex = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin header (native app window, desktop shortcut, local scripts, curl)
+    if (!origin) return callback(null, true);
+    if (allowedLocalhostRegex.test(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`[SECURITY] Blocked Cross-Origin request from unauthorized origin: ${origin}`);
+    return callback(new Error('Cross-Origin Request Blocked by Studio Security Policy.'));
+  },
+  credentials: true
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Security: Path Traversal Defenses & Sanitization Helpers
+function sanitizeFilename(filename) {
+  if (!filename || typeof filename !== 'string') return '';
+  return path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function resolveSafeStoragePath(baseDir, filename) {
+  const safeName = sanitizeFilename(filename);
+  const resolved = path.resolve(baseDir, safeName);
+  const root = path.resolve(baseDir);
+  if (!resolved.startsWith(root)) {
+    throw new Error('Directory traversal attempt detected');
+  }
+  return resolved;
+}
 
 // Directories
 const STORAGE_DIR = path.join(__dirname, 'storage');
@@ -45,43 +77,88 @@ app.use('/storage/references', express.static(REFERENCES_DIR));
 app.use('/storage/audio', express.static(AUDIO_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Multer storage configs
+// Security: Allowed File Type Whitelists
+const ALLOWED_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp']);
+const ALLOWED_VIDEO_EXTS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi']);
+
+function imageFileFilter(req, file, cb) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (ALLOWED_IMAGE_EXTS.has(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Security: Invalid image extension "${ext}". Allowed: .png, .jpg, .jpeg, .webp, .bmp`));
+  }
+}
+
+function videoFileFilter(req, file, cb) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (ALLOWED_VIDEO_EXTS.has(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Security: Invalid video extension "${ext}". Allowed: .mp4, .mov, .webm, .mkv, .avi`));
+  }
+}
+
+// Multer storage configs with sanitized names and strict filters
 const uploadStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${file.fieldname}_${Date.now()}${ext}`);
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+    const field = sanitizeFilename(file.fieldname) || 'upload';
+    cb(null, `${field}_${Date.now()}${ext}`);
   }
 });
-const upload = multer({ storage: uploadStorage });
+const styleUpload = multer({
+  storage: uploadStorage,
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
+const videoUpload = multer({
+  storage: uploadStorage,
+  fileFilter: videoFileFilter,
+  limits: { fileSize: 500 * 1024 * 1024 }
+});
+const upload = videoUpload; // Backward compatibility alias
 
 const keyframeStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, KEYFRAMES_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
     cb(null, `kf_custom_${Date.now()}_${Math.floor(Math.random() * 1000)}${ext}`);
   }
 });
-const keyframeUpload = multer({ storage: keyframeStorage });
+const keyframeUpload = multer({
+  storage: keyframeStorage,
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 const referenceStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, REFERENCES_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
     cb(null, `ref_${Date.now()}_${Math.floor(Math.random() * 1000)}${ext}`);
   }
 });
-const referenceUpload = multer({ storage: referenceStorage });
+const referenceUpload = multer({
+  storage: referenceStorage,
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 const clipStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, CLIPS_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+    const base = sanitizeFilename(path.basename(file.originalname, ext));
     cb(null, `manual_${base}_${Date.now()}${ext}`);
   }
 });
-const clipUpload = multer({ storage: clipStorage, limits: { fileSize: 500 * 1024 * 1024 } });
+const clipUpload = multer({
+  storage: clipStorage,
+  fileFilter: videoFileFilter,
+  limits: { fileSize: 500 * 1024 * 1024 }
+});
 
 // Settings / Config
 let appConfig = {
@@ -606,7 +683,7 @@ app.post('/api/settings', (req, res) => {
 });
 
 // Upload Visual Reference Image (Sole source of truth for style) & Generate Style Brief
-app.post('/api/upload-style-image', upload.single('styleImage'), async (req, res) => {
+app.post('/api/upload-style-image', styleUpload.single('styleImage'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
   const relativeUrl = `/storage/uploads/${req.file.filename}`;
   const filePath = req.file.path;
@@ -2556,9 +2633,13 @@ app.delete('/api/storyboard/:shotId/audio/:filename', (req, res) => {
     shot.audioTracks = (shot.audioTracks || []).filter(a => a.filename !== filename);
     saveProject(project);
 
-    const filePath = path.join(AUDIO_DIR, filename);
-    if (fs.existsSync(filePath)) {
-      try { fs.unlinkSync(filePath); } catch (e) {}
+    try {
+      const filePath = resolveSafeStoragePath(AUDIO_DIR, filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (e) {
+      console.warn('Audio delete security warning:', e.message);
     }
 
     res.json({ success: true, audioTracks: shot.audioTracks });
@@ -2579,7 +2660,7 @@ app.post('/api/export-video', async (req, res) => {
     const resolvedClips = timelineClips.map((c) => {
       let resolvedPath = c.filePath;
       if (!resolvedPath || !fs.existsSync(resolvedPath)) {
-        const fn = c.filename || path.basename(c.url);
+        const fn = sanitizeFilename(c.filename || path.basename(c.url || ''));
         resolvedPath = path.join(CLIPS_DIR, fn);
       }
       return {
@@ -2667,9 +2748,18 @@ function openBrowser(targetUrl) {
   });
 }
 
-const server = app.listen(PORT, () => {
-  const url = `http://localhost:${PORT}`;
-  console.log(`PointBlank Studio server running at ${url}`);
+// Global security and upload error handler
+app.use((err, req, res, next) => {
+  if (err) {
+    console.warn(`[SECURITY / REQUEST ERROR] ${req.method} ${req.url}:`, err.message);
+    return res.status(400).json({ error: err.message || 'Request error' });
+  }
+  next();
+});
+
+const server = app.listen(PORT, HOST, () => {
+  const url = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`;
+  console.log(`PointBlank Studio server running securely at ${url} (host: ${HOST})`);
   if (process.argv.includes('--open') || process.env.AUTO_OPEN === 'true') {
     console.log(`⚡ Launching ${url} in your default browser...`);
     openBrowser(url);
