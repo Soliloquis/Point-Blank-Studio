@@ -126,6 +126,7 @@ class VideoGenerationService {
     cameraMotion = 'Dolly Forward',
     model = 'Wan 2.1 (Fal.ai)',
     tailKeyframePath = null,
+    audioMode = 'sfx_only',
     outputDir
   }) {
     // Consistency Context from assigned references (Characters, Props, Places)
@@ -198,6 +199,7 @@ class VideoGenerationService {
         duration,
         modelEndpoint: endpoint,
         animationCadence: styleBible?.animationCadence || '24',
+        audioMode: audioMode || 'sfx_only',
         outputDir
       });
       return {

@@ -191,6 +191,12 @@ class StudioApp {
 
     this.btnAnalyzeVideo = document.getElementById('btn-analyze-video');
     this.analyzeSpinner = document.getElementById('analyze-spinner');
+    this.highLevelContextInput = document.getElementById('high-level-context-input');
+    this.hlcStatusBadge = document.getElementById('hlc-status-badge');
+    this.btnAddEmptyShot = document.getElementById('btn-add-empty-shot');
+    this.btnRunAiShotAnalysis = document.getElementById('btn-run-ai-shot-analysis');
+    this.aiShotSpinner = document.getElementById('ai-shot-spinner');
+    this.btnOpenShotMarker = document.getElementById('btn-open-shot-marker');
     this.btnPopulateApprovedTimeline = document.getElementById('btn-populate-approved-timeline');
     this.btnClearStoryboard = document.getElementById('btn-clear-storyboard');
     this.ingestStatusBanner = document.getElementById('ingest-status-banner');
@@ -454,6 +460,40 @@ class StudioApp {
 
     // Layered Restyle Studio
     this.initLayerStudioElements();
+    this.initRangeModalElements();
+    this.initGreasePenElements();
+  }
+
+  initRangeModalElements() {
+    this.shotRangeModal = document.getElementById('shot-range-modal') || document.getElementById('modal-shot-range');
+    this.btnOpenShotMarker = document.getElementById('btn-open-shot-marker');
+    this.closeRangeModalBtn = document.getElementById('close-range-modal-btn');
+    this.cancelRangeModalBtn = document.getElementById('cancel-range-modal-btn');
+    this.rangeModalVideo = document.getElementById('range-modal-video');
+    this.rangeTrackLabel = document.getElementById('range-marker-track-label');
+    this.btnRangeToggleTrack = document.getElementById('btn-range-toggle-track');
+    this.btnRangePlayPause = document.getElementById('btn-range-play-pause');
+    this.rangeVideoScrubber = document.getElementById('range-video-scrubber');
+    this.rangeSliderHighlight = document.getElementById('range-slider-highlight');
+    this.rangeCurrentTimecode = document.getElementById('range-current-timecode');
+    this.rangeDurationBadge = document.getElementById('range-duration-badge');
+    this.rangeInTimeText = document.getElementById('range-in-time-text');
+    this.rangeOutTimeText = document.getElementById('range-out-time-text');
+    this.rangePreviewStartCanvas = document.getElementById('range-preview-start-canvas');
+    this.rangePreviewEndCanvas = document.getElementById('range-preview-end-canvas');
+    this.btnRangeStepBackSec = document.getElementById('btn-range-step-back-sec');
+    this.btnRangeStepFwdSec = document.getElementById('btn-range-step-fwd-sec');
+    this.btnRangeStepBackFrame = document.getElementById('btn-range-step-back-frame');
+    this.btnRangeStepFwdFrame = document.getElementById('btn-range-step-fwd-frame');
+    this.btnRangeMarkIn = document.getElementById('btn-range-mark-in');
+    this.btnRangeMarkOut = document.getElementById('btn-range-mark-out');
+    this.btnRangeJumpIn = document.getElementById('btn-range-jump-in');
+    this.btnRangeJumpOut = document.getElementById('btn-range-jump-out');
+    this.rangeShotTitle = document.getElementById('range-shot-title');
+    this.rangeShotDesc = document.getElementById('range-shot-desc');
+    this.rangeCameraMotion = document.getElementById('range-camera-motion');
+    this.btnRangeAddShot = document.getElementById('btn-range-add-shot');
+    this.rangeAddSpinner = document.getElementById('range-add-spinner');
   }
 
   bindEvents() {
@@ -473,6 +513,40 @@ class StudioApp {
     // Layered Restyle Studio Events
     this.initLayerStudioEvents();
     this.initRangeModalEvents();
+    this.initGreasePenEvents();
+
+    // Delegated click handlers for Grease Pen and Enhance Markup
+    this.storyboardGrid?.addEventListener('click', (e) => {
+      const gpBtn = e.target.closest('[data-action="open-grease-pen"], .btn-grease-pen');
+      if (gpBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const card = gpBtn.closest('.storyboard-shot-card');
+        const shotId = gpBtn.dataset.shotId || card?.dataset?.id;
+        const shot = (this.project.storyboard || []).find(s => s.id === shotId);
+        if (shot) {
+          const targetFrame = gpBtn.dataset.targetFrame || 'start';
+          this.openGreasePenModal(shot, targetFrame);
+        }
+        return;
+      }
+
+      const enhanceBtn = e.target.closest('[data-action="enhance-markup"], .btn-enhance-markup');
+      if (enhanceBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const card = enhanceBtn.closest('.storyboard-shot-card');
+        const shotId = card?.dataset?.id;
+        const shot = (this.project.storyboard || []).find(s => s.id === shotId);
+        if (shot) {
+          const descInput = card.querySelector('.shot-desc-input');
+          const motionSelect = card.querySelector('.motion-select');
+          this.handleEnhanceWithMarkup(shot, enhanceBtn, descInput, motionSelect);
+        }
+        return;
+      }
+    });
+
 
     // Stage 1: Style Anchor Image Dropzone
     this.stage1Dropzone?.addEventListener('click', (e) => {
@@ -726,6 +800,38 @@ class StudioApp {
     // Manual Keyframe Ingestion & Custom Shots
     this.uploadKeyframesInput?.addEventListener('change', () => this.handleUploadKeyframes());
     this.btnAddBlankShot?.addEventListener('click', () => this.handleAddBlankShot());
+    this.btnAddEmptyShot?.addEventListener('click', () => this.handleAddBlankShot());
+    this.btnRunAiShotAnalysis?.addEventListener('click', () => this.handleAiShotAnalysis());
+
+    this.highLevelContextInput?.addEventListener('input', () => {
+      const val = this.highLevelContextInput.value;
+      this.project.highLevelContext = val;
+      if (this.project.ingestedVideo) {
+        this.project.ingestedVideo.highLevelContext = val;
+      }
+      if (this.hlcStatusBadge) {
+        if (val.trim()) {
+          this.hlcStatusBadge.className = 'hlc-badge badge-ready';
+          this.hlcStatusBadge.textContent = 'Derived & Active';
+        } else {
+          this.hlcStatusBadge.className = 'hlc-badge badge-waiting';
+          this.hlcStatusBadge.textContent = 'Awaiting Run';
+        }
+      }
+    });
+
+    this.highLevelContextInput?.addEventListener('change', async () => {
+      try {
+        await fetch('/api/storyboard/high-level-context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ highLevelContext: this.highLevelContextInput.value })
+        });
+        this.saveProject();
+      } catch (err) {
+        console.warn('Failed to save high-level context:', err);
+      }
+    });
     this.replaceKeyframeInput?.addEventListener('change', () => this.handleReplaceKeyframe());
 
     // Cinema Player
@@ -1708,9 +1814,64 @@ class StudioApp {
     this.btnAnalyzeVideo.disabled = true;
     this.analyzeSpinner.classList.remove('hidden');
     this.ingestStatusBanner.classList.remove('hidden');
-    this.ingestBannerText.textContent = 'Running End-to-End video analysis with user context & extracting optimal keyframes...';
+    this.ingestBannerText.textContent = 'Running End-to-End analysis across Spatial Previs & True Color videos to derive High Level Context...';
 
     const userDescription = this.userVideoDescInput ? this.userVideoDescInput.value.trim() : '';
+
+    try {
+      const res = await fetch('/api/storyboard/analyze-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoPath: this.project.ingestedVideo.filePath,
+          colorVideoPath: this.project.companionVideo.filePath,
+          userDescription
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.highLevelContext) {
+        this.project.highLevelContext = data.highLevelContext;
+        if (!this.project.ingestedVideo) this.project.ingestedVideo = {};
+        this.project.ingestedVideo.userDescription = userDescription;
+        this.project.ingestedVideo.highLevelContext = data.highLevelContext;
+        this.project.ingestedVideo.analysisSummary = data.highLevelContext;
+        this.project.ingestedVideo.detectedPacing = data.detectedPacing || 'Cinematic Pace';
+
+        if (this.highLevelContextInput) {
+          this.highLevelContextInput.value = data.highLevelContext;
+        }
+        if (this.hlcStatusBadge) {
+          this.hlcStatusBadge.className = 'hlc-badge badge-ready';
+          this.hlcStatusBadge.textContent = 'Derived & Active';
+        }
+
+        this.renderEndToEndSummary();
+        this.ingestBannerText.textContent = '✓ High Level Context derived! You can now Add Shots manually, Mark In/Out, or Run AI Shot Analysis.';
+        this.saveProject();
+      } else {
+        throw new Error(data.error || 'End-to-End context analysis failed');
+      }
+    } catch (err) {
+      alert('Context Analysis error: ' + err.message);
+    } finally {
+      this.btnAnalyzeVideo.disabled = false;
+      this.analyzeSpinner.classList.add('hidden');
+    }
+  }
+
+  async handleAiShotAnalysis() {
+    if (!this.project.ingestedVideo?.filePath) {
+      alert('AI Shot Analysis requires at least the Spatial Previs Video to be loaded.');
+      return;
+    }
+
+    if (this.btnRunAiShotAnalysis) this.btnRunAiShotAnalysis.disabled = true;
+    if (this.aiShotSpinner) this.aiShotSpinner.classList.remove('hidden');
+    this.ingestStatusBanner.classList.remove('hidden');
+    this.ingestBannerText.textContent = 'Running AI Shot Analysis using High Level Context and extraction controls...';
+
+    const userDescription = this.userVideoDescInput ? this.userVideoDescInput.value.trim() : '';
+    const highLevelContext = this.highLevelContextInput?.value?.trim() || this.project.highLevelContext || '';
 
     const extractionOptions = {
       mode: this.extractModeSelect?.value || 'count',
@@ -1721,13 +1882,13 @@ class StudioApp {
     };
 
     try {
-      const res = await fetch('/api/analyze-video', {
+      const res = await fetch('/api/storyboard/ai-shot-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoPath: this.project.ingestedVideo.filePath,
-          filename: this.project.ingestedVideo.filename,
-          colorVideoPath: this.project.companionVideo.filePath,
+          colorVideoPath: this.project.companionVideo?.filePath,
+          highLevelContext,
           userDescription,
           extractionOptions
         })
@@ -1736,21 +1897,20 @@ class StudioApp {
       if (data.success && data.storyboard) {
         this.project.storyboard = data.storyboard;
         if (!this.project.ingestedVideo) this.project.ingestedVideo = {};
-        this.project.ingestedVideo.userDescription = userDescription;
-        this.project.ingestedVideo.analysisSummary = data.analysisSummary || null;
-        this.project.ingestedVideo.detectedPacing = data.detectedPacing || null;
+        this.project.ingestedVideo.analysisSummary = data.analysisSummary || highLevelContext;
+        this.project.ingestedVideo.detectedPacing = data.detectedPacing || 'Cinematic Pace';
         this.renderEndToEndSummary();
         this.renderStoryboard();
-        this.ingestBannerText.textContent = `✓ End-to-end analysis complete: ${data.storyboard.length} shots generated with optimal keyframes aligned to your narrative!`;
+        this.ingestBannerText.textContent = `✓ AI Shot Analysis complete: ${data.storyboard.length} shots deconstructed with spatial continuity and Start/End frames!`;
         this.saveProject();
       } else {
-        throw new Error(data.error || 'End-to-End analysis failed');
+        throw new Error(data.error || 'AI Shot Analysis failed');
       }
     } catch (err) {
-      alert('Analysis error: ' + err.message);
+      alert('AI Shot Analysis error: ' + err.message);
     } finally {
-      this.btnAnalyzeVideo.disabled = false;
-      this.analyzeSpinner.classList.add('hidden');
+      if (this.btnRunAiShotAnalysis) this.btnRunAiShotAnalysis.disabled = false;
+      if (this.aiShotSpinner) this.aiShotSpinner.classList.add('hidden');
     }
   }
 
@@ -2085,7 +2245,7 @@ class StudioApp {
             ${(spatialUrl && (spatialUrl.endsWith('.mp4') || spatialUrl.endsWith('.webm'))) ? `
               <video src="${spatialUrl}" muted playsinline></video>
             ` : spatialUrl ? `
-              <img src="${spatialUrl}" alt="${label} Spatial Frame">
+              <img src="${(isEnd ? shot.endFlattenedMarkupUrl : shot.startFlattenedMarkupUrl) || spatialUrl}" alt="${label} Spatial Frame">
             ` : `
               <div class="empty-thumb-placeholder">
                 <span style="font-size:1.1rem;">📐</span>
@@ -2093,6 +2253,11 @@ class StudioApp {
               </div>
             `}
             ${spatialUrl ? `<span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>` : ''}
+            ${spatialUrl ? `
+              <button type="button" class="btn-grease-pen ${((isEnd ? shot.endMarkupUrl : shot.startMarkupUrl) ? 'has-markup' : '')}" data-action="open-grease-pen" data-shot-id="${shot.id}" data-target-frame="${targetFrame}" title="Draw director notes & motion arrows on Spatial Previs">
+                <span>✏️</span>${(isEnd ? shot.endMarkupUrl : shot.startMarkupUrl) ? '<span class="gp-tag">MARKUP</span>' : ''}
+              </button>
+            ` : ''}
             <div class="thumb-hover-actions">
               ${(!isEnd && index > 0) ? `<button class="btn-xs btn-secondary btn-chain-tail" data-action="chain-tail" title="Chain last frame of Shot #${index}">🔗 Chain</button>` : ''}
               <button class="btn-xs btn-secondary btn-replace-keyframe" data-action="replace-kf" data-target-frame="${targetFrame}" title="Load custom image for ${label}">📷 Replace</button>
@@ -2219,9 +2384,6 @@ class StudioApp {
         <div class="shot-row-narrative-col">
           <div class="narrative-col-header">
             <label>Shot Description & Action</label>
-            <button class="btn-xs btn-ai-describe" data-action="ai-describe" title="Use ChatGPT to synthesize keyframe action with Visual Reference style">
-              <span>🪄 AI Style Prompt</span>
-            </button>
           </div>
 
           <textarea class="shot-desc-input" rows="3" placeholder="Describe action, or type @ to mention Characters, Props, and Places...">${shot.description || ''}</textarea>
@@ -2240,6 +2402,10 @@ class StudioApp {
                 <option value="Static Cinematic" ${shot.cameraMotion === 'Static Cinematic' ? 'selected' : ''}>Static Cinematic</option>
               </select>
             </div>
+            <button class="btn btn-enhance-markup" data-action="enhance-markup" title="Ingest existing description and analyze Start & End Spatial Previs with director draw-over markup to generate a unified, choreographed prompt">
+              <span class="btn-spinner hidden"></span>
+              <span>⚡ ENHANCE WITH SPATIAL PREVIZ MARKUP</span>
+            </button>
           </div>
         </div>
 
@@ -2274,6 +2440,13 @@ class StudioApp {
               <button class="btn btn-sm btn-secondary btn-upload-take-action" data-action="open-footage-modal" title="Assign new take from older footage or upload video">
                 <span>Upload Take</span> <span>📁</span>
               </button>
+              <div class="video-audio-mode-wrap" title="Animation Audio Synthesis Mode: Select whether to generate sound effects only, full score, or mute audio">
+                <select class="video-audio-mode-select" data-action="set-audio-mode" title="Animation Audio Mode">
+                  <option value="sfx_only" ${(!shot.audioMode || shot.audioMode === 'sfx_only') ? 'selected' : ''}>💥 SFX Only (No Music)</option>
+                  <option value="full_audio" ${shot.audioMode === 'full_audio' ? 'selected' : ''}>🎵 SFX + Music</option>
+                  <option value="mute" ${shot.audioMode === 'mute' ? 'selected' : ''}>🔇 Mute (Video Only)</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -2381,6 +2554,23 @@ class StudioApp {
         this.saveProject();
       });
 
+      const audioModeSelect = card.querySelector('.video-audio-mode-select');
+      if (audioModeSelect) {
+        audioModeSelect.addEventListener('change', async () => {
+          shot.audioMode = audioModeSelect.value;
+          this.saveProject();
+          try {
+            await fetch(`/api/storyboard/${shot.id}/audio-mode`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioMode: shot.audioMode })
+            });
+          } catch (err) {
+            console.warn('Failed to save shot audio mode:', err);
+          }
+        });
+      }
+
       // AI Image-to-Description Prompt Synthesizer
       const btnAiDescribe = card.querySelector('[data-action="ai-describe"]');
       if (btnAiDescribe) {
@@ -2484,6 +2674,25 @@ class StudioApp {
           const shotId = btn.dataset.shotId;
           const filename = btn.dataset.filename;
           this.deleteShotAudio(shotId, filename);
+        });
+      });
+
+      // Open Grease Pen Modal
+      card.querySelectorAll('[data-action="open-grease-pen"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const targetFrame = btn.dataset.targetFrame || 'start';
+          this.openGreasePenModal(shot, targetFrame);
+        });
+      });
+
+      // Enhance with Spatial Previz Markup
+      card.querySelectorAll('[data-action="enhance-markup"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.handleEnhanceWithMarkup(shot, btn, descInput, motionSelect);
         });
       });
 
@@ -2782,6 +2991,7 @@ class StudioApp {
           shotId: shot.id,
           description,
           cameraMotion,
+          audioMode: shot.audioMode || 'sfx_only',
           duration: shot.duration || 4,
           model: this.settingsFalModel ? this.settingsFalModel.value : 'Wan 2.1 (Fal.ai)',
           keyframePreference: 'regened'
@@ -7414,6 +7624,15 @@ class StudioApp {
   // SHOT IN / OUT RANGE MARKER & MOTION ANALYSIS METHODS
   // =========================================================================
   openShotRangeModal() {
+    if (!this.shotRangeModal) this.shotRangeModal = document.getElementById('shot-range-modal') || document.getElementById('modal-shot-range');
+    if (!this.rangeModalVideo) this.rangeModalVideo = document.getElementById('range-modal-video');
+    if (!this.rangeTrackLabel) this.rangeTrackLabel = document.getElementById('range-marker-track-label');
+    if (!this.rangePreviewStartCanvas) this.rangePreviewStartCanvas = document.getElementById('range-preview-start-canvas');
+    if (!this.rangePreviewEndCanvas) this.rangePreviewEndCanvas = document.getElementById('range-preview-end-canvas');
+    if (!this.rangeCurrentTimecode) this.rangeCurrentTimecode = document.getElementById('range-current-timecode');
+    if (!this.rangeVideoScrubber) this.rangeVideoScrubber = document.getElementById('range-video-scrubber');
+    if (!this.rangeSliderHighlight) this.rangeSliderHighlight = document.getElementById('range-slider-highlight');
+
     const videoUrl = this.project.ingestedVideo?.url || this.project.companionVideo?.url;
     if (!videoUrl) {
       alert('Please load a video (Spatial Previs or True Color) in the Ingest section first.');
@@ -7595,7 +7814,8 @@ class StudioApp {
           endTime,
           title,
           description,
-          cameraMotion
+          cameraMotion,
+          highLevelContext: this.highLevelContextInput?.value?.trim() || this.project.highLevelContext || ''
         })
       });
 
@@ -7628,6 +7848,7 @@ class StudioApp {
 
   initRangeModalEvents() {
     this.btnOpenShotMarker?.addEventListener('click', () => this.openShotRangeModal());
+    document.getElementById('btn-open-shot-marker')?.addEventListener('click', () => this.openShotRangeModal());
     document.getElementById('btn-open-shot-marker-sm')?.addEventListener('click', () => this.openShotRangeModal());
     this.closeRangeModalBtn?.addEventListener('click', () => this.closeShotRangeModal());
     this.cancelRangeModalBtn?.addEventListener('click', () => this.closeShotRangeModal());
@@ -7717,8 +7938,370 @@ class StudioApp {
     });
   }
 
+
+// =========================================================================
+  // SPATIAL PREVIZ GREASE PEN MARKUP & VISION PROMPT SYNTHESIS
+  // =========================================================================
+  initGreasePenElements() {
+    this.modalGreasePen = document.getElementById('modal-grease-pen');
+    this.closeGreasePenBtn = document.getElementById('close-grease-pen-modal-btn');
+    this.cancelGreasePenBtn = document.getElementById('cancel-grease-pen-btn');
+    this.saveGreasePenBtn = document.getElementById('save-grease-pen-btn');
+    this.gpSaveSpinner = document.getElementById('gp-save-spinner');
+    this.greasePenSubtitle = document.getElementById('grease-pen-subtitle');
+    this.greasePenBgImg = document.getElementById('grease-pen-bg-img');
+    this.greasePenCanvas = document.getElementById('grease-pen-canvas');
+    this.gpBtnUndo = document.getElementById('gp-btn-undo');
+    this.gpBtnClear = document.getElementById('gp-btn-clear');
+
+    this.gpActiveTool = 'pen';
+    this.gpActiveColor = '#ff0055';
+    this.gpActiveSize = 6;
+    this.gpIsDrawing = false;
+    this.gpStartX = 0;
+    this.gpStartY = 0;
+    this.gpUndoStack = [];
+    this.gpSnapshotBeforeStroke = null;
+    this.activeGreasePenShot = null;
+    this.activeGreasePenFrame = 'start';
+  }
+
+  initGreasePenEvents() {
+    this.closeGreasePenBtn?.addEventListener('click', () => this.closeGreasePenModal());
+    this.cancelGreasePenBtn?.addEventListener('click', () => this.closeGreasePenModal());
+    this.saveGreasePenBtn?.addEventListener('click', () => this.saveGreasePenMarkup());
+
+    this.modalGreasePen?.addEventListener('click', (e) => {
+      if (e.target === this.modalGreasePen) {
+        this.closeGreasePenModal();
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.modalGreasePen && !this.modalGreasePen.classList.contains('hidden')) {
+        this.closeGreasePenModal();
+      }
+    });
+
+    // Tool selectors
+    document.querySelectorAll('.btn-gp-tool').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.btn-gp-tool').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.gpActiveTool = btn.dataset.tool || 'pen';
+      });
+    });
+
+    // Size selectors
+    document.querySelectorAll('.btn-gp-size').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.btn-gp-size').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.gpActiveSize = parseInt(btn.dataset.size || '6', 10);
+      });
+    });
+
+    // Color swatches
+    document.querySelectorAll('.gp-color-swatch').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.gp-color-swatch').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.gpActiveColor = btn.dataset.color || '#ff0055';
+      });
+    });
+
+    this.gpBtnUndo?.addEventListener('click', () => this.gpUndo());
+    this.gpBtnClear?.addEventListener('click', () => this.gpClear());
+
+    // Canvas drawing interactions
+    if (this.greasePenCanvas) {
+      const canvas = this.greasePenCanvas;
+
+      const getCoords = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        return {
+          x: (clientX - rect.left) * scaleX,
+          y: (clientY - rect.top) * scaleY
+        };
+      };
+
+      const startDrawing = (e) => {
+        e.preventDefault();
+        const coords = getCoords(e);
+        this.gpIsDrawing = true;
+        this.gpStartX = coords.x;
+        this.gpStartY = coords.y;
+
+        const ctx = canvas.getContext('2d');
+        this.gpSnapshotBeforeStroke = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        if (this.gpActiveTool === 'pen' || this.gpActiveTool === 'eraser') {
+          ctx.beginPath();
+          ctx.moveTo(coords.x, coords.y);
+          if (this.gpActiveTool === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.arc(coords.x, coords.y, this.gpActiveSize * 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      };
+
+      const drawMove = (e) => {
+        if (!this.gpIsDrawing) return;
+        e.preventDefault();
+        const coords = getCoords(e);
+        const ctx = canvas.getContext('2d');
+
+        if (this.gpActiveTool === 'pen') {
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.strokeStyle = this.gpActiveColor;
+          ctx.lineWidth = this.gpActiveSize;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.lineTo(coords.x, coords.y);
+          ctx.stroke();
+        } else if (this.gpActiveTool === 'eraser') {
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.beginPath();
+          ctx.arc(coords.x, coords.y, this.gpActiveSize * 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (this.gpActiveTool === 'arrow') {
+          // Restore snapshot before drawing live preview arrow
+          if (this.gpSnapshotBeforeStroke) {
+            ctx.putImageData(this.gpSnapshotBeforeStroke, 0, 0);
+          }
+          this.gpDrawArrow(ctx, this.gpStartX, this.gpStartY, coords.x, coords.y, this.gpActiveColor, this.gpActiveSize);
+        }
+      };
+
+      const stopDrawing = (e) => {
+        if (!this.gpIsDrawing) return;
+        this.gpIsDrawing = false;
+        const ctx = canvas.getContext('2d');
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.closePath();
+        this.gpPushUndo();
+      };
+
+      canvas.addEventListener('mousedown', startDrawing);
+      canvas.addEventListener('mousemove', drawMove);
+      window.addEventListener('mouseup', stopDrawing);
+
+      canvas.addEventListener('touchstart', startDrawing, { passive: false });
+      canvas.addEventListener('touchmove', drawMove, { passive: false });
+      window.addEventListener('touchend', stopDrawing);
+    }
+  }
+
+  gpDrawArrow(ctx, fromX, fromY, toX, toY, color, width) {
+    const headLength = Math.max(16, width * 3.5);
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const angle = Math.atan2(dy, dx);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Main line shaft
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+
+    // Arrowhead cone
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - headLength * Math.cos(angle - Math.PI / 6), toY - headLength * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(toX - headLength * Math.cos(angle + Math.PI / 6), toY - headLength * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  gpPushUndo() {
+    if (!this.greasePenCanvas) return;
+    if (this.gpUndoStack.length >= 20) this.gpUndoStack.shift();
+    this.gpUndoStack.push(this.greasePenCanvas.toDataURL());
+  }
+
+  gpUndo() {
+    if (!this.greasePenCanvas || this.gpUndoStack.length === 0) return;
+    this.gpUndoStack.pop(); // Remove current state
+    const prev = this.gpUndoStack[this.gpUndoStack.length - 1];
+    const ctx = this.greasePenCanvas.getContext('2d');
+    ctx.clearRect(0, 0, this.greasePenCanvas.width, this.greasePenCanvas.height);
+    if (prev) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0);
+      img.src = prev;
+    }
+  }
+
+  gpClear() {
+    if (!this.greasePenCanvas) return;
+    const ctx = this.greasePenCanvas.getContext('2d');
+    ctx.clearRect(0, 0, this.greasePenCanvas.width, this.greasePenCanvas.height);
+    this.gpPushUndo();
+  }
+
+  openGreasePenModal(shot, targetFrame = 'start') {
+    if (!this.modalGreasePen) {
+      this.initGreasePenElements();
+      this.initGreasePenEvents();
+    }
+    this.activeGreasePenShot = shot;
+    this.activeGreasePenFrame = targetFrame;
+
+    const isEnd = targetFrame === 'end';
+    const spatialUrl = isEnd ? shot.endKeyframeUrl : shot.keyframeUrl;
+    if (!spatialUrl) {
+      alert('Please ensure a Spatial Previs frame is loaded or extracted first.');
+      return;
+    }
+
+    if (this.greasePenSubtitle) {
+      this.greasePenSubtitle.textContent = `Shot #${shot.shotNumber || 1} · ${targetFrame.toUpperCase()} Frame Spatial Previs Markup`;
+    }
+
+    if (this.greasePenBgImg) {
+      this.greasePenBgImg.src = spatialUrl;
+    }
+
+    if (this.greasePenCanvas) {
+      this.greasePenCanvas.width = 1280;
+      this.greasePenCanvas.height = 720;
+      const ctx = this.greasePenCanvas.getContext('2d');
+      ctx.clearRect(0, 0, 1280, 720);
+      this.gpUndoStack = [];
+
+      // Check if previous markup exists
+      const existingMarkupUrl = isEnd ? shot.endMarkupUrl : shot.startMarkupUrl;
+      if (existingMarkupUrl) {
+        const mImg = new Image();
+        mImg.crossOrigin = 'anonymous';
+        mImg.onload = () => {
+          ctx.drawImage(mImg, 0, 0, 1280, 720);
+          this.gpPushUndo();
+        };
+        mImg.src = existingMarkupUrl;
+      } else {
+        this.gpPushUndo();
+      }
+    }
+
+    this.modalGreasePen?.classList.remove('hidden');
+  }
+
+  closeGreasePenModal() {
+    this.modalGreasePen?.classList.add('hidden');
+  }
+
+  async saveGreasePenMarkup() {
+    if (!this.activeGreasePenShot || !this.greasePenCanvas || !this.greasePenBgImg) return;
+    const shot = this.activeGreasePenShot;
+    const frameType = this.activeGreasePenFrame;
+
+    if (this.gpSaveSpinner) this.gpSaveSpinner.classList.remove('hidden');
+    if (this.saveGreasePenBtn) this.saveGreasePenBtn.disabled = true;
+
+    try {
+      const markupDataUrl = this.greasePenCanvas.toDataURL('image/png');
+
+      // Create flattened composite offscreen
+      const offscreen = document.createElement('canvas');
+      offscreen.width = 1280;
+      offscreen.height = 720;
+      const offCtx = offscreen.getContext('2d');
+
+      // Draw background image if loaded
+      if (this.greasePenBgImg.complete && this.greasePenBgImg.naturalWidth > 0) {
+        offCtx.drawImage(this.greasePenBgImg, 0, 0, 1280, 720);
+      }
+      // Draw markup on top
+      offCtx.drawImage(this.greasePenCanvas, 0, 0, 1280, 720);
+      const flattenedDataUrl = offscreen.toDataURL('image/png');
+
+      const res = await fetch(`/api/storyboard/${shot.id}/markup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frameType,
+          markupDataUrl,
+          flattenedDataUrl
+        })
+      });
+
+      const data = await res.json();
+      if (!data.success || !data.shot) throw new Error(data.error || 'Failed to save markup');
+
+      Object.assign(shot, data.shot);
+      this.renderStoryboard();
+      this.saveProject();
+      this.closeGreasePenModal();
+    } catch (err) {
+      alert('Error saving markup: ' + err.message);
+    } finally {
+      if (this.gpSaveSpinner) this.gpSaveSpinner.classList.add('hidden');
+      if (this.saveGreasePenBtn) this.saveGreasePenBtn.disabled = false;
+    }
+  }
+
+  async handleEnhanceWithMarkup(shot, btn, descInput, motionSelect) {
+    if (!shot) return;
+    btn.disabled = true;
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = `<span class="btn-spinner"></span> Synthesizing with Vision AI...`;
+
+    const currentDescription = descInput?.value || shot.description || '';
+    const cameraMotion = motionSelect?.value || shot.cameraMotion || 'Dolly Forward';
+
+    try {
+      const res = await fetch(`/api/storyboard/${shot.id}/enhance-with-markup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentDescription,
+          cameraMotion
+        })
+      });
+
+      const data = await res.json();
+      if (!data.success || !data.description) throw new Error(data.error || 'Enhancement failed');
+
+      shot.description = data.description;
+      if (descInput) {
+        descInput.value = data.description;
+        descInput.style.transition = 'box-shadow 0.3s ease';
+        descInput.style.boxShadow = '0 0 14px rgba(14, 165, 233, 0.6)';
+        setTimeout(() => { descInput.style.boxShadow = ''; }, 2000);
+      }
+      if (data.cameraMotion) {
+        shot.cameraMotion = data.cameraMotion;
+        if (motionSelect) motionSelect.value = data.cameraMotion;
+      }
+      if (data.shot) Object.assign(shot, data.shot);
+
+      this.saveProject();
+    } catch (err) {
+      alert('Prompt Enhancement Notice: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   window.studioApp = new StudioApp();
+
+
 });

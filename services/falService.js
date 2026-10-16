@@ -563,6 +563,7 @@ CRITICAL PRESERVATION MANDATE:
     duration = 5,
     modelEndpoint = null,
     animationCadence = '24',
+    audioMode = 'sfx_only',
     outputDir
   }) {
     if (!this.isConfigured()) {
@@ -592,7 +593,22 @@ CRITICAL PRESERVATION MANDATE:
       ? 'Animated on twos, hand-drawn timing, 12fps cadence.' 
       : (animationCadence === '8' ? 'Stop-motion physical cadence, 8fps tactile timing.' : 'Fluid cinematic motion, 24fps.');
 
-    const videoPrompt = `${prompt}. Dynamic camera movement: ${cameraMotion}. ${cadenceInstruction}`;
+    const mode = audioMode || 'sfx_only';
+    let audioPromptDirective = '';
+    let shouldGenerateAudio = true;
+
+    if (mode === 'mute' || mode === 'silent' || mode === 'none') {
+      shouldGenerateAudio = false;
+    } else if (mode === 'sfx_only') {
+      shouldGenerateAudio = true;
+      audioPromptDirective = ' Authentic environmental sound effects and foley only. No background music, no musical score, no songs.';
+    } else if (mode === 'full_audio' || mode === 'music_and_sfx') {
+      shouldGenerateAudio = true;
+      audioPromptDirective = ' Immersive sound effects with dramatic cinematic background music.';
+    }
+
+    const finalPrompt = audioPromptDirective ? `${prompt}.${audioPromptDirective}` : prompt;
+    const videoPrompt = `${finalPrompt}. Dynamic camera movement: ${cameraMotion}. ${cadenceInstruction}`;
 
     const isWan = endpoint.includes('wan');
     const isKling = endpoint.includes('kling');
@@ -600,7 +616,7 @@ CRITICAL PRESERVATION MANDATE:
 
     let payload;
     if (isSeedance && endpoint.includes('reference-to-video')) {
-      const promptWithRef = prompt.includes('@Image1') ? prompt : `@Image1: ${prompt}`;
+      const promptWithRef = finalPrompt.includes('@Image1') ? finalPrompt : `@Image1: ${finalPrompt}`;
       const imageUrls = [imageDataUri];
       if (tailDataUri) {
         imageUrls.push(tailDataUri);
@@ -611,17 +627,17 @@ CRITICAL PRESERVATION MANDATE:
         duration: String(Math.min(Math.max(parseInt(duration, 10) || 5, 4), 30)),
         resolution: '720p',
         aspect_ratio: '16:9',
-        generate_audio: true
+        generate_audio: shouldGenerateAudio
       };
     } else if (isSeedance) {
       // ByteDance Seedance 2.5 Image-to-Video: True First-Frame Keyframe Conditioning
       payload = {
         image_url: imageDataUri,
-        prompt: `${prompt}. Dynamic camera movement: ${cameraMotion}. ${cadenceInstruction}`,
+        prompt: `${finalPrompt}. Dynamic camera movement: ${cameraMotion}. ${cadenceInstruction}`,
         duration: String(Math.min(Math.max(parseInt(duration, 10) || 5, 4), 30)),
         resolution: '720p',
         aspect_ratio: '16:9',
-        generate_audio: true
+        generate_audio: shouldGenerateAudio
       };
       if (tailDataUri) {
         payload.last_image = tailDataUri;

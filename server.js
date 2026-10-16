@@ -9,7 +9,7 @@ const { FalService } = require('./services/falService');
 const { VideoGenerationService } = require('./services/seedanceService');
 const { ElevenLabsService } = require('./services/elevenlabsService');
 const { stitchTimelineClips, getVideoDuration, extractLastFrame, extractSingleKeyframe } = require('./services/ffmpegService');
-const { analyzeAndDeconstructVideo, generateImageToDescription, generateStyleBrief, compileContinuityDirectives } = require('./services/videoAnalysisService');
+const { analyzeAndDeconstructVideo, generateHighLevelContext, analyzeShotMotionDelta, generateImageToDescription, generateStyleBrief, compileContinuityDirectives, enhancePromptWithSpatialMarkup } = require('./services/videoAnalysisService');
 const { detectColorKeysInSpatialFrame } = require('./services/colorKeyService');
 const { extractShotLayers, regenerateLayerAsset, getCanonicalAssetSprite, bakeAndCommitComposite } = require('./services/layerCompositorService');
 
@@ -1013,10 +1013,146 @@ app.post('/api/ingest-dual-folder', async (req, res) => {
   }
 });
 
-// Video Analysis & Storyboard Deconstruction
+// End-to-End Analysis: Generates High-Level Context from Spatial Previs + True Color + User Description
+app.post('/api/storyboard/analyze-context', async (req, res) => {
+  try {
+    const { videoPath, filename, colorVideoPath, userDescription } = req.body;
+    const project = getProject();
+    let targetPath = videoPath || project.ingestedVideo?.filePath;
+    if (!targetPath || !fs.existsSync(targetPath)) {
+      targetPath = path.join(UPLOADS_DIR, filename || '');
+    }
+    if (!fs.existsSync(targetPath)) {
+      return res.status(400).json({ error: 'Spatial Previs Video file not found' });
+    }
+
+    let targetColorPath = colorVideoPath || project.companionVideo?.filePath || null;
+    if (targetColorPath && !fs.existsSync(targetColorPath)) {
+      targetColorPath = null;
+    }
+
+    if (!targetColorPath) {
+      return res.status(400).json({
+        error: 'End-to-End Analysis requires BOTH Spatial Previs Video and True Color Video. Please load both recordings before running analysis.'
+      });
+    }
+
+    const allRefs = getAllReferences(project);
+    const descToUse = userDescription !== undefined ? userDescription : (project.ingestedVideo?.userDescription || '');
+
+    const result = await generateHighLevelContext({
+      videoPath: targetPath,
+      colorVideoPath: targetColorPath,
+      userDescription: descToUse,
+      keyframesDir: KEYFRAMES_DIR,
+      falApiKey: appConfig.falApiKey,
+      openaiApiKey: appConfig.openaiApiKey,
+      geminiApiKey: appConfig.geminiApiKey,
+      options: { referenceAssets: allRefs }
+    });
+
+    const highLevelContext = result.highLevelContext || '';
+    const detectedPacing = result.detectedPacing || 'Cinematic Pace';
+
+    project.highLevelContext = highLevelContext;
+    if (!project.ingestedVideo) project.ingestedVideo = {};
+    project.ingestedVideo.filePath = targetPath;
+    project.ingestedVideo.filename = path.basename(targetPath);
+    project.ingestedVideo.url = `/storage/uploads/${path.basename(targetPath)}`;
+    project.ingestedVideo.userDescription = descToUse;
+    project.ingestedVideo.highLevelContext = highLevelContext;
+    project.ingestedVideo.analysisSummary = highLevelContext;
+    project.ingestedVideo.detectedPacing = detectedPacing;
+    saveProject(project);
+
+    res.json({
+      success: true,
+      highLevelContext,
+      detectedPacing
+    });
+  } catch (err) {
+    console.error('End-to-End Context Analysis error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update or manually edit High-Level Context
+app.post('/api/storyboard/high-level-context', (req, res) => {
+  const { highLevelContext } = req.body;
+  const project = getProject();
+  project.highLevelContext = highLevelContext || '';
+  if (!project.ingestedVideo) project.ingestedVideo = {};
+  project.ingestedVideo.highLevelContext = highLevelContext || '';
+  project.ingestedVideo.analysisSummary = highLevelContext || '';
+  saveProject(project);
+  res.json({ success: true, highLevelContext: project.highLevelContext });
+});
+
+// AI Shot Analysis: Deconstructs video into optimal storyboard shots informed by High Level Context
+app.post('/api/storyboard/ai-shot-analysis', async (req, res) => {
+  try {
+    const { videoPath, filename, colorVideoPath, highLevelContext, userDescription, extractionOptions } = req.body;
+    const project = getProject();
+    let targetPath = videoPath || project.ingestedVideo?.filePath;
+    if (!targetPath || !fs.existsSync(targetPath)) {
+      targetPath = path.join(UPLOADS_DIR, filename || '');
+    }
+    if (!fs.existsSync(targetPath)) {
+      return res.status(400).json({ error: 'Spatial Previs Video file not found' });
+    }
+
+    let targetColorPath = colorVideoPath || project.companionVideo?.filePath || null;
+    if (targetColorPath && !fs.existsSync(targetColorPath)) {
+      targetColorPath = null;
+    }
+
+    const allRefs = getAllReferences(project);
+    const contextToUse = highLevelContext || project.highLevelContext || project.ingestedVideo?.highLevelContext || '';
+    const descToUse = userDescription !== undefined ? userDescription : (project.ingestedVideo?.userDescription || '');
+
+    const analysisResult = await analyzeAndDeconstructVideo({
+      videoPath: targetPath,
+      colorVideoPath: targetColorPath,
+      userDescription: descToUse,
+      highLevelContext: contextToUse,
+      keyframesDir: KEYFRAMES_DIR,
+      falApiKey: appConfig.falApiKey,
+      openaiApiKey: appConfig.openaiApiKey,
+      geminiApiKey: appConfig.geminiApiKey,
+      options: { ...(extractionOptions || {}), referenceAssets: allRefs }
+    });
+
+    const storyboardShots = Array.isArray(analysisResult) ? analysisResult : (analysisResult.storyboardShots || []);
+    const analysisSummary = analysisResult.analysisSummary || contextToUse || null;
+    const detectedPacing = analysisResult.detectedPacing || 'Cinematic Pace';
+
+    project.storyboard = storyboardShots;
+    if (!project.ingestedVideo) project.ingestedVideo = {};
+    project.ingestedVideo.filePath = targetPath;
+    project.ingestedVideo.filename = path.basename(targetPath);
+    project.ingestedVideo.url = `/storage/uploads/${path.basename(targetPath)}`;
+    project.ingestedVideo.userDescription = descToUse;
+    project.ingestedVideo.highLevelContext = contextToUse || analysisSummary;
+    project.ingestedVideo.analysisSummary = analysisSummary;
+    project.ingestedVideo.detectedPacing = detectedPacing;
+    saveProject(project);
+
+    res.json({
+      success: true,
+      storyboard: storyboardShots,
+      analysisSummary,
+      detectedPacing
+    });
+  } catch (err) {
+    console.error('AI Shot Analysis error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Backward compatibility alias for /api/analyze-video
 app.post('/api/analyze-video', async (req, res) => {
   try {
-    const { videoPath, filename, colorVideoPath, userDescription, extractionOptions } = req.body;
+    const { videoPath, filename, colorVideoPath, highLevelContext, userDescription, extractionOptions } = req.body;
     let targetPath = videoPath;
     if (!targetPath || !fs.existsSync(targetPath)) {
       targetPath = path.join(UPLOADS_DIR, filename || '');
@@ -1031,17 +1167,15 @@ app.post('/api/analyze-video', async (req, res) => {
       targetColorPath = null;
     }
 
-    if (!targetColorPath) {
-      return res.status(400).json({
-        error: 'End-to-End Analysis requires both Spatial Previs Video and True Color Video. Please upload or ingest both recordings, or assemble shots manually.'
-      });
-    }
-
     const allRefs = getAllReferences(project);
+    const contextToUse = highLevelContext || project.highLevelContext || project.ingestedVideo?.highLevelContext || '';
+    const descToUse = userDescription !== undefined ? userDescription : (project.ingestedVideo?.userDescription || '');
+
     const analysisResult = await analyzeAndDeconstructVideo({
       videoPath: targetPath,
       colorVideoPath: targetColorPath,
-      userDescription: userDescription !== undefined ? userDescription : (project.ingestedVideo?.userDescription || ''),
+      userDescription: descToUse,
+      highLevelContext: contextToUse,
       keyframesDir: KEYFRAMES_DIR,
       falApiKey: appConfig.falApiKey,
       openaiApiKey: appConfig.openaiApiKey,
@@ -1050,19 +1184,18 @@ app.post('/api/analyze-video', async (req, res) => {
     });
 
     const storyboardShots = Array.isArray(analysisResult) ? analysisResult : (analysisResult.storyboardShots || []);
-    const analysisSummary = analysisResult.analysisSummary || null;
-    const detectedPacing = analysisResult.detectedPacing || null;
+    const analysisSummary = analysisResult.analysisSummary || contextToUse || null;
+    const detectedPacing = analysisResult.detectedPacing || 'Cinematic Pace';
 
     project.storyboard = storyboardShots;
-    project.ingestedVideo = {
-      ...(project.ingestedVideo || {}),
-      filePath: targetPath,
-      filename: path.basename(targetPath),
-      url: `/storage/uploads/${path.basename(targetPath)}`,
-      userDescription: userDescription !== undefined ? userDescription : (project.ingestedVideo?.userDescription || ''),
-      analysisSummary,
-      detectedPacing
-    };
+    if (!project.ingestedVideo) project.ingestedVideo = {};
+    project.ingestedVideo.filePath = targetPath;
+    project.ingestedVideo.filename = path.basename(targetPath);
+    project.ingestedVideo.url = `/storage/uploads/${path.basename(targetPath)}`;
+    project.ingestedVideo.userDescription = descToUse;
+    project.ingestedVideo.highLevelContext = contextToUse || analysisSummary;
+    project.ingestedVideo.analysisSummary = analysisSummary;
+    project.ingestedVideo.detectedPacing = detectedPacing;
     saveProject(project);
 
     res.json({
@@ -1220,10 +1353,42 @@ app.post('/api/storyboard/add-range', async (req, res) => {
       }
     }
 
+    // 3. Analyze Shot between In & Out markers using High-Level Context
+    let motionDelta = null;
+    try {
+      motionDelta = await analyzeShotMotionDelta({
+        startFramePath: keyframePath,
+        endFramePath: endKeyframePath,
+        colorStartFramePath: colorFramePath,
+        colorEndFramePath: endColorFramePath,
+        duration,
+        shotNumber: shotNum,
+        userDescription: description || '',
+        highLevelContext: req.body.highLevelContext || project.highLevelContext || project.ingestedVideo?.highLevelContext || '',
+        falApiKey: appConfig.falApiKey,
+        openaiApiKey: appConfig.openaiApiKey,
+        geminiApiKey: appConfig.geminiApiKey
+      });
+    } catch (err) {
+      console.warn('[add-range] Shot delta analysis warning:', err.message);
+    }
+
+    const finalTitle = title || motionDelta?.title || `Shot ${shotNum} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`;
+    const finalDesc = description || motionDelta?.description || `Action progression from ${startTime.toFixed(1)}s to ${endTime.toFixed(1)}s.`;
+    const finalMotion = (cameraMotion && cameraMotion !== 'Dolly Forward') ? cameraMotion : (motionDelta?.cameraMotion || cameraMotion || 'Dolly Forward');
+    const finalSpatial = motionDelta?.spatialContinuity || {
+      subjectScreenPosition: shotNum % 2 === 0 ? 'Screen-Left' : 'Screen-Right',
+      facingDirection: shotNum % 2 === 0 ? 'Screen-Right' : 'Screen-Left',
+      eyelineMatch: shotNum % 2 === 0 ? 'Looking Screen-Right' : 'Looking Screen-Left',
+      cameraAngle: shotNum === 1 ? 'Wide Establishing 35mm' : (shotNum % 2 === 0 ? 'Medium 50mm' : 'Reverse OTS 85mm'),
+      lightingOrigin: 'Balanced Key Lighting (5600K)',
+      rule180Vector: 'East Axis Continuity'
+    };
+
     const newShot = {
       id: `sb_range_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       shotNumber: shotNum,
-      title: title || `Shot ${shotNum} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`,
+      title: finalTitle,
       startTime,
       endTime,
       duration,
@@ -1235,16 +1400,9 @@ app.post('/api/storyboard/add-range', async (req, res) => {
       colorFramePath,
       endColorFrameUrl,
       endColorFramePath,
-      description: description || 'Describe the visual action from start to end frame...',
-      cameraMotion: cameraMotion || 'Dolly Forward',
-      spatialContinuity: {
-        subjectScreenPosition: shotNum % 2 === 0 ? 'Screen-Left' : 'Screen-Right',
-        facingDirection: shotNum % 2 === 0 ? 'Screen-Right' : 'Screen-Left',
-        eyelineMatch: shotNum % 2 === 0 ? 'Looking Screen-Right' : 'Looking Screen-Left',
-        cameraAngle: shotNum === 1 ? 'Wide Establishing 35mm' : (shotNum % 2 === 0 ? 'Medium 50mm' : 'Reverse OTS 85mm'),
-        lightingOrigin: 'Balanced Key Lighting (5600K)',
-        rule180Vector: 'East Axis Continuity'
-      },
+      description: finalDesc,
+      cameraMotion: finalMotion,
+      spatialContinuity: finalSpatial,
       status: 'pending',
       approved: false,
       generatedClip: null
@@ -1376,6 +1534,130 @@ app.post('/api/storyboard/:shotId/spatial', (req, res) => {
 });
 
 // Image-to-Description: AI vision prompt synthesis combining Visual Reference with Keyframe
+// Save Director Grease Pen Markup for Start or End frame
+app.post('/api/storyboard/:shotId/markup', (req, res) => {
+  try {
+    const { shotId } = req.params;
+    const { frameType = 'start', markupDataUrl, flattenedDataUrl } = req.body;
+    const project = getProject();
+    const shot = (project.storyboard || []).find(s => s.id === shotId);
+    if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+    const timestamp = Date.now();
+    const prefix = frameType === 'end' ? 'end' : 'start';
+
+    if (markupDataUrl && markupDataUrl.startsWith('data:image/')) {
+      const markupFilename = `markup_${shot.id}_${prefix}_${timestamp}.png`;
+      const markupPath = path.join(KEYFRAMES_DIR, markupFilename);
+      const b64 = markupDataUrl.replace(/^data:image\/\w+;base64,/, '');
+      fs.writeFileSync(markupPath, Buffer.from(b64, 'base64'));
+      shot[`${prefix}MarkupUrl`] = `/storage/keyframes/${markupFilename}`;
+      shot[`${prefix}MarkupPath`] = markupPath;
+    }
+
+    if (flattenedDataUrl && flattenedDataUrl.startsWith('data:image/')) {
+      const flattenedFilename = `flattened_markup_${shot.id}_${prefix}_${timestamp}.png`;
+      const flattenedPath = path.join(KEYFRAMES_DIR, flattenedFilename);
+      const b64 = flattenedDataUrl.replace(/^data:image\/\w+;base64,/, '');
+      fs.writeFileSync(flattenedPath, Buffer.from(b64, 'base64'));
+      shot[`${prefix}FlattenedMarkupUrl`] = `/storage/keyframes/${flattenedFilename}`;
+      shot[`${prefix}FlattenedMarkupPath`] = flattenedPath;
+    }
+
+    saveProject(project);
+    res.json({ success: true, shot });
+  } catch (err) {
+    console.error('[Markup API] Error saving markup:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Clear Director Grease Pen Markup for Start or End frame
+app.delete('/api/storyboard/:shotId/markup/:frameType', (req, res) => {
+  try {
+    const { shotId, frameType } = req.params;
+    const project = getProject();
+    const shot = (project.storyboard || []).find(s => s.id === shotId);
+    if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+    const prefix = frameType === 'end' ? 'end' : 'start';
+    delete shot[`${prefix}MarkupUrl`];
+    delete shot[`${prefix}MarkupPath`];
+    delete shot[`${prefix}FlattenedMarkupUrl`];
+    delete shot[`${prefix}FlattenedMarkupPath`];
+
+    saveProject(project);
+    res.json({ success: true, shot });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Enhance Shot Description & Action with Spatial Previs Grease Pen Markup
+app.post('/api/storyboard/:shotId/enhance-with-markup', async (req, res) => {
+  try {
+    const { shotId } = req.params;
+    const { currentDescription, cameraMotion } = req.body;
+    const project = getProject();
+    const shot = (project.storyboard || []).find(s => s.id === shotId);
+    if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+    // Resolve start and end frame paths (prefer flattened markup layers if available)
+    let startFramePath = shot.startFlattenedMarkupPath;
+    if (!startFramePath || !fs.existsSync(startFramePath)) {
+      startFramePath = shot.keyframePath;
+      if (!startFramePath && shot.keyframeUrl) {
+        startFramePath = path.join(KEYFRAMES_DIR, path.basename(shot.keyframeUrl));
+      }
+    }
+
+    let endFramePath = shot.endFlattenedMarkupPath;
+    if (!endFramePath || !fs.existsSync(endFramePath)) {
+      endFramePath = shot.endKeyframePath;
+      if (!endFramePath && shot.endKeyframeUrl) {
+        endFramePath = path.join(KEYFRAMES_DIR, path.basename(shot.endKeyframeUrl));
+      }
+    }
+
+    const highLevelContext = project.highLevelContext || project.ingestedVideo?.highLevelContext || '';
+    const desc = (currentDescription !== undefined ? currentDescription : shot.description) || '';
+    const motion = cameraMotion || shot.cameraMotion || 'Dolly Forward';
+
+    const result = await enhancePromptWithSpatialMarkup({
+      startFramePath,
+      endFramePath,
+      startMarkupPath: shot.startFlattenedMarkupPath,
+      endMarkupPath: shot.endFlattenedMarkupPath,
+      currentDescription: desc,
+      highLevelContext,
+      cameraMotion: motion,
+      shotNumber: shot.shotNumber || 1,
+      falApiKey: appConfig.falApiKey || process.env.FAL_KEY || '',
+      openaiApiKey: appConfig.openaiApiKey || process.env.OPENAI_API_KEY || '',
+      geminiApiKey: appConfig.geminiApiKey || process.env.GEMINI_API_KEY || ''
+    });
+
+    if (result && result.description) {
+      shot.description = result.description;
+      if (result.cameraMotion) shot.cameraMotion = result.cameraMotion;
+      if (result.spatialContinuity) shot.spatialContinuity = result.spatialContinuity;
+      saveProject(project);
+      return res.json({
+        success: true,
+        description: shot.description,
+        cameraMotion: shot.cameraMotion,
+        markupInterpretation: result.markupInterpretation,
+        shot
+      });
+    }
+
+    throw new Error('Failed to synthesize markup into unified prompt');
+  } catch (err) {
+    console.error('[Enhance Markup API] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/storyboard/:shotId/ai-describe', async (req, res) => {
   try {
     const { shotId } = req.params;
@@ -1433,7 +1715,7 @@ app.post('/api/generate-storyboard-clip', async (req, res) => {
   req.setTimeout(1200000); // 20 minutes for diffusion video synthesis
   res.setTimeout(1200000);
   try {
-    const { shotId, description, cameraMotion, duration, model } = req.body;
+    const { shotId, description, cameraMotion, duration, model, audioMode } = req.body;
     const project = getProject();
 
     const shotIndex = (project.storyboard || []).findIndex((s) => s.id === shotId);
@@ -1550,6 +1832,7 @@ app.post('/api/generate-storyboard-clip', async (req, res) => {
       .map(id => allRefs.find(r => r.id === id))
       .filter(Boolean);
 
+    shot.audioMode = audioMode || shot.audioMode || 'sfx_only';
     const continuityDirectives = compileContinuityDirectives(shot, previousShot, assignedRefs);
     const basePrompt = description || shot.description;
     const promptWithContinuity = continuityDirectives ? `${basePrompt}. Continuity Directives: ${continuityDirectives}` : basePrompt;
@@ -1569,6 +1852,7 @@ app.post('/api/generate-storyboard-clip', async (req, res) => {
       continuityDirectives,
       duration: duration || shot.duration || 4,
       cameraMotion: cameraMotion || shot.cameraMotion || 'Dolly Forward',
+      audioMode: shot.audioMode || audioMode || 'sfx_only',
       model: model || appConfig.falModel || 'bytedance/seedance-2.5/image-to-video',
       outputDir: CLIPS_DIR
     });

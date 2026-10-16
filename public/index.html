@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.1.0">
+  <link rel="stylesheet" href="style.css?v=2.2.0">
 </head>
 <body>
   <!-- Top App Header -->
@@ -345,25 +345,40 @@
         <div class="storyboard-workspace-content">
           
           <!-- Ingestion Bar / Header -->
-          <div class="ingest-header-bar">
-            <div class="ingest-left">
+          <div class="ingest-header-bar storyboard-ingest-top-grid">
+            <!-- Col 1: Branding & Style Anchor Status -->
+            <div class="ingest-branding-col">
               <div class="ingest-title-wrap">
                 <span class="icon-large">📥</span>
                 <div>
-                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <h2>Video Ingestion & Storyboard Breakdown</h2>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <h2 style="font-size: 1.02rem; margin: 0;">Video Ingestion &amp; Storyboard Breakdown</h2>
+                  </div>
+                  <div style="margin-top: 6px;">
                     <button class="pill-btn-subtle" id="btn-jump-to-style-studio" title="Click to view or edit Master Style Anchor in Stage 1">
                       <span class="status-dot dot-active"></span>
-                      <span id="storyboard-anchor-pill-text">🎨 Style Anchor</span>
+                      <span id="storyboard-anchor-pill-text">Style Anchor: Active</span>
                     </button>
                   </div>
-                  <p>Upload a video to analyze and deconstruct into an editable shot-by-shot storyboard.</p>
+                  <p style="font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; line-height: 1.35;">
+                    Upload a video to analyze and deconstruct into an editable shot-by-shot storyboard.
+                  </p>
+                  <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary btn-xs" id="btn-ingest-dual-folder" title="Auto-detect and load both recordings directly from your project folder">
+                      <span class="btn-spinner hidden" id="dual-folder-spinner"></span>
+                      <span>📂 Folder</span>
+                    </button>
+                    <label class="btn btn-secondary btn-xs" for="dual-video-input" style="cursor:pointer;" title="Upload both video files simultaneously">
+                      <span>Upload Both</span>
+                    </label>
+                    <input type="file" id="dual-video-input" accept="video/mp4,video/quicktime,video/webm" multiple class="file-input-hidden">
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Dual-Video Ingestion Bay (Spatial Previs + True Color) -->
-            <div class="dual-video-bay">
+            <!-- Col 2: Companion Videos (Top) & High Level Context (Bottom) -->
+            <div class="ingest-videos-context-col">
               <div class="video-slots-grid">
                 <!-- Slot 1: Spatial Previz Video -->
                 <div class="video-slot-card" id="slot-spatial-video">
@@ -372,7 +387,7 @@
                       <span class="slot-icon">📐</span>
                       <div>
                         <div class="slot-title">1. Spatial Previs Video</div>
-                        <div class="slot-subtitle">Camera motion, blockout geometry & color keys</div>
+                        <div class="slot-subtitle">Camera motion, blockout geometry &amp; color keys</div>
                       </div>
                     </div>
                     <span class="slot-status-pill badge-required" id="slot-spatial-badge">Required</span>
@@ -380,9 +395,9 @@
 
                   <div class="slot-dropzone" id="slot-spatial-dropzone">
                     <div class="slot-empty-state" id="slot-spatial-empty">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg>
-                      <span>Drag & drop Spatial Previs video or</span>
-                      <label class="btn btn-secondary btn-xs" for="ingest-video-input" style="cursor:pointer;">Choose Video</label>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+                      <span>Drag &amp; drop Spatial Previs or</span>
+                      <label class="btn btn-secondary btn-xs" for="ingest-video-input" style="cursor:pointer;">Choose</label>
                     </div>
                     <div class="slot-filled-state hidden" id="slot-spatial-filled">
                       <div class="slot-file-info">
@@ -405,7 +420,7 @@
                       <span class="slot-icon">🎨</span>
                       <div>
                         <div class="slot-title">2. True Color Video</div>
-                        <div class="slot-subtitle">Companion textured & shaded lighting pass</div>
+                        <div class="slot-subtitle">Companion textured &amp; shaded lighting pass</div>
                       </div>
                     </div>
                     <span class="slot-status-pill badge-required" id="slot-color-badge">Required</span>
@@ -413,9 +428,9 @@
 
                   <div class="slot-dropzone" id="slot-color-dropzone">
                     <div class="slot-empty-state" id="slot-color-empty">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                      <span>Drag & drop True Color video or</span>
-                      <label class="btn btn-secondary btn-xs" for="companion-video-input" style="cursor:pointer;">Choose Video</label>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                      <span>Drag &amp; drop True Color or</span>
+                      <label class="btn btn-secondary btn-xs" for="companion-video-input" style="cursor:pointer;">Choose</label>
                     </div>
                     <div class="slot-filled-state hidden" id="slot-color-filled">
                       <div class="slot-file-info">
@@ -432,106 +447,111 @@
                 </div>
               </div>
 
-              <!-- Primary Action Toolbar -->
-              <div class="ingest-controls-row">
-                <div class="ingest-controls-left">
-                  <!-- Analysis button: Enabled ONLY when both slots are ready -->
-                  <button class="btn btn-primary" id="btn-open-shot-marker" style="background: linear-gradient(135deg, #0284c7, #2563eb); border-color: rgba(56, 189, 248, 0.6); box-shadow: 0 0 14px rgba(14, 165, 233, 0.4);" title="Open Shot Scrubber to manually mark Start Frame and End Frame boundaries for each shot">
-                    <span>⏱️ Mark Shot In/Out</span>
-                  </button>
-                  <button class="btn btn-primary btn-glow" id="btn-analyze-video" disabled title="Both Spatial Previs and True Color recordings are required for End-to-End Analysis">
-                    <span class="btn-spinner hidden" id="analyze-spinner"></span>
-                    <span>🤖 Run End-to-End Analysis</span>
-                  </button>
-
-                  <button class="btn btn-secondary" id="btn-ingest-dual-folder" title="Auto-detect and load both recordings directly from your Unity/Blender project folder">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                    <span class="btn-spinner hidden" id="dual-folder-spinner"></span>
-                    <span>📂 Ingest Recordings Folder</span>
-                  </button>
-
-                  <label class="btn btn-secondary" for="dual-video-input" title="Upload both video files simultaneously">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg>
-                    <span>Upload Both Videos</span>
-                  </label>
-                  <input type="file" id="dual-video-input" accept="video/mp4,video/quicktime,video/webm" multiple class="file-input-hidden">
+              <!-- High Level Context (AI Derived) Card -->
+              <div class="high-level-context-card">
+                <div class="high-level-context-header">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 0.85rem;">🧠</span>
+                    <span class="high-level-context-title">High Level Context [AI Derived]</span>
+                  </div>
+                  <span class="high-level-context-badge" id="hlc-status-badge">Awaiting Analysis</span>
                 </div>
-
-                <div class="ingest-controls-right">
-                  <!-- Manual Per-Shot Alternative Workflow -->
-                  <label class="btn btn-secondary btn-sm" for="upload-keyframes-input" title="Upload custom images directly as keyframes (manual per-shot workflow)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                    <span>📁 Load Keyframe Images</span>
-                  </label>
-                  <input type="file" id="upload-keyframes-input" accept="image/*" multiple class="file-input-hidden">
-                  <input type="file" id="upload-color-frame-input" accept="image/*" class="file-input-hidden">
-
-                  <button class="btn btn-secondary btn-sm" id="btn-add-blank-shot" title="Add blank shot card for manual image uploads">
-                    <span>➕ Add Blank Shot</span>
-                  </button>
-
-                  <button class="btn btn-accent-glow btn-sm" id="btn-populate-approved-timeline">
-                    <span>➕ Send Approved to Timeline</span>
-                  </button>
-
-                  <button class="btn btn-secondary btn-danger-hover btn-sm" id="btn-clear-storyboard" title="Clear all storyboard shots and ingested videos">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    <span>Clear All</span>
-                  </button>
-                </div>
+                <textarea id="high-level-context-input" class="high-level-context-textarea" rows="2" placeholder="AI-derived high level sequence context will appear here after running End-to-End Analysis. You can also edit it directly to guide shot generation..."></textarea>
               </div>
+            </div>
+
+            <!-- Col 3: Video Narrative & Context (Manual Input) -->
+            <div class="video-context-card ingest-manual-narrative-col">
+              <div class="video-context-header">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span style="font-size:0.95rem;">📝</span>
+                  <span class="context-label">Video Narrative &amp; Context (Manual Input):</span>
+                </div>
+                <span class="context-hint">Ground truth story &amp; scene context used for end-to-end analysis &amp; optimal keyframe selection</span>
+              </div>
+              <textarea id="user-video-desc-input" class="user-video-desc-textarea" rows="4" placeholder="Manually describe what happens across this video (e.g. plot beats, subject actions, environment, camera movements) to direct the end-to-end analysis and extract the best keyframes..."></textarea>
+            </div>
+
+            <!-- Col 4: Run End-to-End Analysis Big Button -->
+            <div class="ingest-e2e-btn-col">
+              <button class="btn btn-primary btn-e2e-tall" id="btn-analyze-video" disabled title="Both Spatial Previs and True Color recordings are required for End-to-End Analysis">
+                <span class="btn-spinner hidden" id="analyze-spinner"></span>
+                <span class="btn-e2e-title">RUN<br>End-to-End<br>Analysis</span>
+              </button>
             </div>
           </div>
 
-          <!-- User Manual Video Description / Context Panel -->
-          <div class="video-context-card">
-            <div class="video-context-header">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:1.05rem;">📝</span>
-                <span class="context-label">Video Narrative & Context (Manual Input):</span>
-              </div>
-              <span class="context-hint">Ground truth story & scene context used for end-to-end analysis & optimal keyframe selection</span>
-            </div>
-            <textarea id="user-video-desc-input" class="user-video-desc-textarea" rows="2" placeholder="Manually describe what happens across this video (e.g. plot beats, subject actions, environment, camera movements) to direct the end-to-end analysis and extract the best keyframes..."></textarea>
-          </div>
+          <!-- Storyboard Shot Creation & Extraction Toolbar -->
+          <div class="storyboard-action-bar">
+            <!-- 3 Main Action Buttons -->
+            <div class="storyboard-action-buttons-group">
+              <button class="btn btn-action-cyan" id="btn-add-empty-shot" title="Add blank shot card for manual image uploads or prompt construction">
+                <span>➕ ADD NEW EMPTY SHOT</span>
+              </button>
 
-          <!-- Keyframe Generation Controls Toolbar -->
-          <div class="extraction-toolbar">
-            <span class="toolbar-label">⚙️ Keyframe Extraction Controls:</span>
-            <div class="extraction-ctrl-item">
-              <label for="extract-mode-select">Mode:</label>
-              <select id="extract-mode-select" class="select-input-sm">
-                <option value="count" selected>Target Shot Count</option>
-                <option value="interval">Fixed Interval (Seconds)</option>
-              </select>
+              <button class="btn btn-action-orange" id="btn-open-shot-marker" title="Open Shot Scrubber to manually mark Start Frame and End Frame boundaries for each shot">
+                <span>⏱️ ADD NEW START-TO-END SHOT</span>
+              </button>
+
+              <button class="btn btn-action-rose" id="btn-run-ai-shot-analysis" title="Run AI Shot Analysis to deconstruct the video into shots using extraction controls &amp; High-Level Context">
+                <span class="btn-spinner hidden" id="ai-shot-spinner"></span>
+                <span>🤖 RUN AI SHOT ANALYSIS</span>
+              </button>
             </div>
-            <div class="extraction-ctrl-item" id="extract-count-group">
-              <label for="extract-count-input">Count:</label>
-              <select id="extract-count-input" class="select-input-sm">
-                <option value="4">4 Shots</option>
-                <option value="6">6 Shots</option>
-                <option value="8" selected>8 Shots</option>
-                <option value="12">12 Shots</option>
-                <option value="16">16 Shots</option>
-              </select>
-            </div>
-            <div class="extraction-ctrl-item hidden" id="extract-interval-group">
-              <label for="extract-interval-input">Interval:</label>
-              <select id="extract-interval-input" class="select-input-sm">
-                <option value="1">Every 1s</option>
-                <option value="2">Every 2s</option>
-                <option value="3" selected>Every 3s</option>
-                <option value="4">Every 4s</option>
-                <option value="5">Every 5s</option>
-              </select>
-            </div>
-            <div class="extraction-ctrl-item">
-              <label for="extract-start-input">Start (s):</label>
-              <input type="number" id="extract-start-input" min="0" step="0.5" value="0" class="input-number-sm">
-            </div>
-            <div class="extraction-ctrl-item">
-              <label for="extract-end-input">End (s):</label>
-              <input type="number" id="extract-end-input" min="0" step="0.5" placeholder="Full" class="input-number-sm">
+
+            <!-- Keyframe Extraction Controls & Clear -->
+            <div class="extraction-toolbar-embedded">
+              <span class="toolbar-label">⚙️ KEYFRAME EXTRACTION CONTROLS:</span>
+              <div class="extraction-ctrl-item">
+                <label for="extract-mode-select">Mode:</label>
+                <select id="extract-mode-select" class="select-input-sm">
+                  <option value="count" selected>Target Shot Count</option>
+                  <option value="interval">Fixed Interval (Seconds)</option>
+                </select>
+              </div>
+              <div class="extraction-ctrl-item" id="extract-count-group">
+                <label for="extract-count-input">Count:</label>
+                <select id="extract-count-input" class="select-input-sm">
+                  <option value="4">4 Shots</option>
+                  <option value="6">6 Shots</option>
+                  <option value="8" selected>8 Shots</option>
+                  <option value="12">12 Shots</option>
+                  <option value="16">16 Shots</option>
+                </select>
+              </div>
+              <div class="extraction-ctrl-item hidden" id="extract-interval-group">
+                <label for="extract-interval-input">Interval:</label>
+                <select id="extract-interval-input" class="select-input-sm">
+                  <option value="1">Every 1s</option>
+                  <option value="2">Every 2s</option>
+                  <option value="3" selected>Every 3s</option>
+                  <option value="4">Every 4s</option>
+                  <option value="5">Every 5s</option>
+                </select>
+              </div>
+              <div class="extraction-ctrl-item">
+                <label for="extract-start-input">Start (s):</label>
+                <input type="number" id="extract-start-input" min="0" step="0.5" value="0" class="input-number-sm">
+              </div>
+              <div class="extraction-ctrl-item">
+                <label for="extract-end-input">End (s):</label>
+                <input type="number" id="extract-end-input" min="0" step="0.5" placeholder="Full" class="input-number-sm">
+              </div>
+
+              <label class="btn btn-secondary btn-xs" for="upload-keyframes-input" style="cursor:pointer;" title="Upload custom images directly as keyframes">
+                <span>📁 Load Images</span>
+              </label>
+              <input type="file" id="upload-keyframes-input" accept="image/*" multiple class="file-input-hidden">
+              <input type="file" id="upload-color-frame-input" accept="image/*" class="file-input-hidden">
+
+              <button class="btn btn-accent-glow btn-xs" id="btn-populate-approved-timeline" title="Send all approved shots to timeline">
+                <span>➕ To Timeline</span>
+              </button>
+
+              <button class="btn btn-secondary btn-danger-hover btn-sm" id="btn-clear-storyboard" title="Clear all storyboard shots and ingested videos">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <span>Clear All</span>
+              </button>
             </div>
           </div>
 
@@ -1997,8 +2017,8 @@
 
   
   <!-- ================= SHOT IN/OUT RANGE MARKER MODAL ================= -->
-  <div class="modal hidden" id="shot-range-modal">
-    <div class="modal-dialog range-marker-modal">
+  <div class="modal-backdrop hidden" id="shot-range-modal">
+    <div class="modal-card range-marker-modal">
       <div class="modal-header">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:1.4rem;">⏱️</span>
@@ -2121,6 +2141,84 @@
   </div>
 
 
+  
+  <!-- ================= SPATIAL PREVIZ GREASE PEN MARKUP MODAL ================= -->
+  <div class="modal-backdrop hidden" id="modal-grease-pen">
+    <div class="modal-card grease-pen-modal-dialog">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">✏️</span>
+          <div>
+            <h2>Spatial Previs Grease Pen Markup</h2>
+            <div class="modal-subtitle" id="grease-pen-subtitle">Draw director motion vectors, trajectories, and focal callouts directly over 3D blocking</div>
+          </div>
+        </div>
+        <button class="btn-icon" id="close-grease-pen-modal-btn">✕</button>
+      </div>
+
+      <div class="modal-body" style="padding:14px 18px; display:flex; flex-direction:column; gap:10px;">
+        <!-- Drawing Toolbar -->
+        <div class="grease-pen-toolbar">
+          <!-- Tools -->
+          <div class="gp-tool-group">
+            <button type="button" class="btn-gp-tool active" data-tool="pen" id="gp-tool-pen" title="Freehand Pen (Draw motion paths and contours)">✏️ Pen</button>
+            <button type="button" class="btn-gp-tool" data-tool="arrow" id="gp-tool-arrow" title="Trajectory Arrow (Click & drag to create directional vector arrow)">🏹 Arrow</button>
+            <button type="button" class="btn-gp-tool" data-tool="eraser" id="gp-tool-eraser" title="Eraser">🧹 Eraser</button>
+          </div>
+
+          <div class="gp-separator"></div>
+
+          <!-- Stroke Width -->
+          <div class="gp-size-group">
+            <span class="gp-label">Width:</span>
+            <button type="button" class="btn-gp-size" data-size="3" title="Fine (3px)">Thin</button>
+            <button type="button" class="btn-gp-size active" data-size="6" title="Medium (6px)">Med</button>
+            <button type="button" class="btn-gp-size" data-size="12" title="Bold (12px)">Bold</button>
+          </div>
+
+          <div class="gp-separator"></div>
+
+          <!-- High-Contrast Neon Annotation Colors -->
+          <div class="gp-color-group">
+            <span class="gp-label">Color:</span>
+            <button type="button" class="gp-color-swatch active" data-color="#ff0055" style="background:#ff0055;" title="Neon Pink / Red (Trajectory / Acceleration)"></button>
+            <button type="button" class="gp-color-swatch" data-color="#00f0ff" style="background:#00f0ff;" title="Cyber Cyan (Camera Motion / Vector)"></button>
+            <button type="button" class="gp-color-swatch" data-color="#ffe600" style="background:#ffe600;" title="Electric Yellow (Focal Highlight / Caution)"></button>
+            <button type="button" class="gp-color-swatch" data-color="#00ff66" style="background:#00ff66;" title="Toxic Green (Flight Entry / Exit)"></button>
+            <button type="button" class="gp-color-swatch" data-color="#ffffff" style="background:#ffffff;" title="White (Contrast / Labels)"></button>
+          </div>
+
+          <div class="gp-separator"></div>
+
+          <!-- Undo & Clear -->
+          <div class="gp-action-group">
+            <button type="button" class="btn btn-xs btn-secondary" id="gp-btn-undo" title="Undo last stroke">↩ Undo</button>
+            <button type="button" class="btn btn-xs btn-secondary" id="gp-btn-clear" title="Clear canvas">🗑️ Clear</button>
+          </div>
+        </div>
+
+        <!-- Interactive Canvas Viewport (16:9 Aspect Ratio) -->
+        <div class="grease-pen-canvas-wrap" id="grease-pen-canvas-wrap">
+          <img id="grease-pen-bg-img" class="grease-pen-bg" src="" alt="Spatial Previs Frame">
+          <canvas id="grease-pen-canvas" class="grease-pen-drawing-canvas" width="1280" height="720"></canvas>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="justify-content:space-between;">
+        <div style="font-size:0.74rem; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
+          <span>💡 Tip: Click & drag with <strong>Arrow</strong> tool to define motion and camera sweep vectors.</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" id="cancel-grease-pen-btn">Cancel</button>
+          <button class="btn btn-primary btn-glow" id="save-grease-pen-btn" style="background:linear-gradient(135deg, #0ea5e9, #6366f1);">
+            <span class="btn-spinner hidden" id="gp-save-spinner"></span>
+            <span>💾 Save Markup Layer</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Floating @mention Autocomplete Dropdown for Storyboard textareas -->
   <div id="at-mention-dropdown" class="at-mention-dropdown hidden"></div>
 
@@ -2139,6 +2237,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.1.0"></script>
+  <script src="app.js?v=2.2.0"></script>
 </body>
 </html>

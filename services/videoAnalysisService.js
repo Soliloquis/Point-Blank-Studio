@@ -1,7 +1,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { extractKeyframes, sampleVideoFrames, extractSingleKeyframe, getVideoDuration } = require('./ffmpegService');
+const { extractKeyframes, sampleVideoFrames, extractSingleKeyframe, getVideoDuration, runFfmpeg } = require('./ffmpegService');
 const { deriveMotionVectorsFromPrevizVideo } = require('./colorKeyService');
 
 // Helper to make HTTPS requests
@@ -170,8 +170,269 @@ function requestFalAnyLlmVision({ apiKey, imageUrls, prompt }) {
   });
 }
 
-// End-to-End Multi-Modal Video Analysis combining visual timeline sampling with manual user description
-async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, keyframesDir, userDescription = '', falApiKey, openaiApiKey, geminiApiKey, options = {} }) {
+// End-to-End High Level Context Generation analyzing both Spatial Previs and True Color videos
+async function generateHighLevelContext({ videoPath, colorVideoPath = null, userDescription = '', keyframesDir, falApiKey, openaiApiKey, geminiApiKey, options = {} }) {
+  fs.mkdirSync(keyframesDir, { recursive: true });
+  const totalDuration = await getVideoDuration(videoPath);
+  const tempSampleDir = path.join(keyframesDir, `temp_hlc_${Date.now()}`);
+  fs.mkdirSync(tempSampleDir, { recursive: true });
+
+  const sampleCount = 6;
+  const step = totalDuration / sampleCount;
+  const samples = [];
+
+  try {
+    for (let i = 0; i < sampleCount; i++) {
+      const ts = Math.max(0.1, Math.min(totalDuration - 0.2, (i + 0.5) * step));
+      const sThumb = path.join(tempSampleDir, `sp_${i + 1}.jpg`);
+      try {
+        await runFfmpeg([
+          '-y', '-ss', `${ts}`, '-i', videoPath, '-vframes', '1', '-q:v', '4', '-vf', 'scale=480:-1', sThumb
+        ]);
+      } catch (e) {}
+
+      let cThumb = null;
+      if (colorVideoPath && fs.existsSync(colorVideoPath)) {
+        cThumb = path.join(tempSampleDir, `col_${i + 1}.jpg`);
+        try {
+          await runFfmpeg([
+            '-y', '-ss', `${ts}`, '-i', colorVideoPath, '-vframes', '1', '-q:v', '4', '-vf', 'scale=480:-1', cThumb
+          ]);
+        } catch (e) {
+          cThumb = null;
+        }
+      }
+
+      samples.push({
+        index: i + 1,
+        timestamp: Math.round(ts * 10) / 10,
+        spatialPath: fs.existsSync(sThumb) ? sThumb : null,
+        colorPath: (cThumb && fs.existsSync(cThumb)) ? cThumb : null
+      });
+    }
+
+    let result = null;
+    if (falApiKey && falApiKey.trim()) {
+      try {
+        result = await analyzeHighLevelWithFal(samples, totalDuration, userDescription, falApiKey);
+      } catch (err) {
+        console.warn('[HighLevelContext] Fal.ai analysis failed:', err.message);
+      }
+    }
+
+    if (!result && openaiApiKey && openaiApiKey.trim()) {
+      try {
+        result = await analyzeHighLevelWithOpenAI(samples, totalDuration, userDescription, openaiApiKey);
+      } catch (err) {
+        console.warn('[HighLevelContext] OpenAI analysis failed:', err.message);
+      }
+    }
+
+    if (!result && geminiApiKey && geminiApiKey.trim()) {
+      try {
+        result = await analyzeHighLevelWithGemini(samples, totalDuration, userDescription, geminiApiKey);
+      } catch (err) {
+        console.warn('[HighLevelContext] Gemini analysis failed:', err.message);
+      }
+    }
+
+    if (result && result.highLevelContext) {
+      return {
+        highLevelContext: result.highLevelContext,
+        detectedPacing: result.detectedPacing || 'Cinematic Pace'
+      };
+    }
+  } catch (err) {
+    console.warn('[HighLevelContext] Video sampling error:', err.message);
+  } finally {
+    try {
+      if (fs.existsSync(tempSampleDir)) {
+        fs.rmSync(tempSampleDir, { recursive: true, force: true });
+      }
+    } catch (e) {}
+  }
+
+  // Fallback context synthesis
+  const cleanDesc = (userDescription || '').trim();
+  const baseText = cleanDesc
+    ? cleanDesc
+    : 'Cinematic sequence featuring dynamic subject action, camera motion tracking, and textured lighting contrast.';
+  return {
+    highLevelContext: `${baseText} Across the ${totalDuration.toFixed(1)}s sequence, camera movements establish dramatic scene framing, spatial depth, and pacing continuity.`,
+    detectedPacing: 'Cinematic Pace'
+  };
+}
+
+// Multi-Modal High Level Context using Fal.ai Any-LLM Vision
+async function analyzeHighLevelWithFal(samples, totalDuration, userDescription, apiKey) {
+  const imageUrls = [];
+  const beatNotes = [];
+  for (const s of samples) {
+    if (s.spatialPath && fs.existsSync(s.spatialPath)) {
+      imageUrls.push(`data:image/jpeg;base64,${fileToBase64(s.spatialPath)}`);
+      beatNotes.push(`Beat ${s.index} (${s.timestamp}s): Spatial Previs (camera trajectory/geometry)`);
+    }
+    if (s.colorPath && fs.existsSync(s.colorPath)) {
+      imageUrls.push(`data:image/jpeg;base64,${fileToBase64(s.colorPath)}`);
+      beatNotes.push(`Beat ${s.index} (${s.timestamp}s): True Color (lighting/materials/palette)`);
+    }
+  }
+
+  const prompt = `You are an expert cinematic director, continuity supervisor, and cinematographer conducting an end-to-end sequence analysis on companion production video footage.
+
+INPUT TRACKS:
+1. Spatial Previs: Camera trajectories, 3D blocking, wireframe/proxy geometry.
+2. True Color: Final textures, lighting mood, color palette, atmospheric fog/smoke, environmental materials.
+
+USER MANUAL NARRATIVE & CONTEXT INPUT:
+"${(userDescription || '').trim() || 'No manual description provided.'}"
+
+TOTAL SEQUENCE DURATION: ${totalDuration.toFixed(1)} seconds.
+CHRONOLOGICAL SAMPLED BEATS:
+${beatNotes.join('\n')}
+
+INSTRUCTIONS:
+1. Treat the user's manual narrative input as ground truth story context. Correlate it with the visual progression across the Spatial Previs and True Color frames.
+2. Formulate "highLevelContext": A comprehensive, evocative 2-4 sentence director's scene overview describing the overarching narrative arc, visual tone, setting/environment, primary subjects/vehicles, key lighting and atmospheric conditions, and camera pacing.
+3. Formulate "detectedPacing": e.g. "Cinematic Pace", "Fast Kinetic Action", "Deliberate Suspense", "Explosive Dogfight", "Slow Tension Build".
+
+Respond with strictly valid JSON:
+{
+  "highLevelContext": "Comprehensive 2-4 sentence director scene overview...",
+  "detectedPacing": "Cinematic Pace"
+}`;
+
+  return await requestFalAnyLlmVision({
+    apiKey,
+    imageUrls,
+    prompt
+  });
+}
+
+// Multi-Modal High Level Context using OpenAI GPT-4o-mini
+async function analyzeHighLevelWithOpenAI(samples, totalDuration, userDescription, apiKey) {
+  const content = [
+    {
+      type: 'text',
+      text: `You are an expert cinematic director, continuity supervisor, and cinematographer conducting an end-to-end sequence analysis on companion production video footage.
+
+INPUT TRACKS:
+1. Spatial Previs: Camera trajectories, 3D blocking, wireframe/proxy geometry.
+2. True Color: Final textures, lighting mood, color palette, atmospheric fog/smoke, environmental materials.
+
+USER MANUAL NARRATIVE & CONTEXT INPUT:
+"${(userDescription || '').trim() || 'No manual description provided.'}"
+
+TOTAL SEQUENCE DURATION: ${totalDuration.toFixed(1)} seconds.
+
+INSTRUCTIONS:
+1. Treat the user's manual narrative input as ground truth story context. Correlate it with the visual progression across the Spatial Previs and True Color frames.
+2. Formulate "highLevelContext": A comprehensive, evocative 2-4 sentence director's scene overview describing the overarching narrative arc, visual tone, setting/environment, primary subjects/vehicles, key lighting and atmospheric conditions, and camera pacing.
+3. Formulate "detectedPacing": e.g. "Cinematic Pace", "Fast Kinetic Action", "Deliberate Suspense", "Explosive Dogfight", "Slow Tension Build".
+
+Respond with strictly valid JSON matching this schema:
+{
+  "highLevelContext": "Comprehensive 2-4 sentence director scene overview...",
+  "detectedPacing": "Cinematic Pace"
+}`
+    }
+  ];
+
+  for (const s of samples) {
+    if (s.spatialPath && fs.existsSync(s.spatialPath)) {
+      content.push({ type: 'text', text: `[Beat ${s.index} at ${s.timestamp}s - Spatial Previs Track]:` });
+      content.push({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${fileToBase64(s.spatialPath)}`, detail: 'low' }
+      });
+    }
+    if (s.colorPath && fs.existsSync(s.colorPath)) {
+      content.push({ type: 'text', text: `[Beat ${s.index} at ${s.timestamp}s - True Color Companion Track]:` });
+      content.push({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${fileToBase64(s.colorPath)}`, detail: 'low' }
+      });
+    }
+  }
+
+  const payload = {
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content }],
+    response_format: { type: 'json_object' }
+  };
+
+  const response = await requestJson('https://api.openai.com/v1/chat/completions', {
+    'Authorization': `Bearer ${apiKey.trim()}`
+  }, payload);
+
+  const raw = response.choices?.[0]?.message?.content;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Multi-Modal High Level Context using Gemini 2.0 Flash
+async function analyzeHighLevelWithGemini(samples, totalDuration, userDescription, apiKey) {
+  const parts = [
+    {
+      text: `You are an expert cinematic director, continuity supervisor, and cinematographer conducting an end-to-end sequence analysis on companion production video footage.
+
+INPUT TRACKS:
+1. Spatial Previs: Camera trajectories, 3D blocking, wireframe/proxy geometry.
+2. True Color: Final textures, lighting mood, color palette, atmospheric fog/smoke, environmental materials.
+
+USER MANUAL NARRATIVE & CONTEXT INPUT:
+"${(userDescription || '').trim() || 'No manual description provided.'}"
+
+TOTAL SEQUENCE DURATION: ${totalDuration.toFixed(1)} seconds.
+
+INSTRUCTIONS:
+1. Treat the user's manual narrative input as ground truth story context. Correlate it with the visual progression across the Spatial Previs and True Color frames.
+2. Formulate "highLevelContext": A comprehensive, evocative 2-4 sentence director's scene overview describing the overarching narrative arc, visual tone, setting/environment, primary subjects/vehicles, key lighting and atmospheric conditions, and camera pacing.
+3. Formulate "detectedPacing": e.g. "Cinematic Pace", "Fast Kinetic Action", "Deliberate Suspense", "Explosive Dogfight", "Slow Tension Build".
+
+Respond with strictly valid JSON:
+{
+  "highLevelContext": "Comprehensive 2-4 sentence director scene overview...",
+  "detectedPacing": "Cinematic Pace"
+}`
+    }
+  ];
+
+  for (const s of samples) {
+    if (s.spatialPath && fs.existsSync(s.spatialPath)) {
+      parts.push({ text: `[Beat ${s.index} at ${s.timestamp}s - Spatial Previs Track]:` });
+      parts.push({
+        inline_data: { mime_type: 'image/jpeg', data: fileToBase64(s.spatialPath) }
+      });
+    }
+    if (s.colorPath && fs.existsSync(s.colorPath)) {
+      parts.push({ text: `[Beat ${s.index} at ${s.timestamp}s - True Color Companion Track]:` });
+      parts.push({
+        inline_data: { mime_type: 'image/jpeg', data: fileToBase64(s.colorPath) }
+      });
+    }
+  }
+
+  const payload = { contents: [{ parts }] };
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`;
+  const response = await requestJson(endpoint, {}, payload);
+
+  const raw = response.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!raw) return null;
+  try {
+    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch (e) {
+    return null;
+  }
+}
+
+// End-to-End Multi-Modal Video Analysis combining visual timeline sampling with manual user description & High Level Context
+async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, keyframesDir, userDescription = '', highLevelContext = '', falApiKey, openaiApiKey, geminiApiKey, options = {} }) {
   fs.mkdirSync(keyframesDir, { recursive: true });
   const totalDuration = await getVideoDuration(videoPath);
   
@@ -180,14 +441,14 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
 
   try {
     // 1. Visual Sampling: Extract lightweight candidate frames across the video for end-to-end analysis
-    const targetSampleCount = options.maxFrames ? Math.min(Number(options.maxFrames) + 2, 12) : 8;
+    const targetSampleCount = options.maxFrames ? Math.min(Number(options.maxFrames) + 2, 16) : 8;
     const { samples } = await sampleVideoFrames(videoPath, tempSampleDir, targetSampleCount);
 
     if (samples && samples.length > 0) {
-      // 2. Perform End-to-End Multi-Modal Analysis with User's Manual Description (Fal.ai -> OpenAI -> Gemini)
+      // 2. Perform End-to-End Multi-Modal Analysis with User's Manual Description & High Level Context
       if (falApiKey && falApiKey.trim()) {
         try {
-          e2eResult = await analyzeEndToEndWithFal(samples, totalDuration, userDescription, falApiKey);
+          e2eResult = await analyzeEndToEndWithFal(samples, totalDuration, userDescription, falApiKey, highLevelContext);
         } catch (err) {
           console.warn('Fal.ai End-to-End video analysis failed, falling back:', err.message);
         }
@@ -195,7 +456,7 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
 
       if (!e2eResult && openaiApiKey && openaiApiKey.trim()) {
         try {
-          e2eResult = await analyzeEndToEndWithOpenAI(samples, totalDuration, userDescription, openaiApiKey);
+          e2eResult = await analyzeEndToEndWithOpenAI(samples, totalDuration, userDescription, openaiApiKey, highLevelContext);
         } catch (err) {
           console.warn('OpenAI End-to-End video analysis failed:', err.message);
         }
@@ -203,7 +464,7 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
 
       if (!e2eResult && geminiApiKey && geminiApiKey.trim()) {
         try {
-          e2eResult = await analyzeEndToEndWithGemini(samples, totalDuration, userDescription, geminiApiKey);
+          e2eResult = await analyzeEndToEndWithGemini(samples, totalDuration, userDescription, geminiApiKey, highLevelContext);
         } catch (err) {
           console.warn('Gemini End-to-End video analysis failed:', err.message);
         }
@@ -220,7 +481,7 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
     } catch (e) {}
   }
 
-  // 3. If End-to-End AI Analysis succeeded: extract high-quality keyframes at the AI's optimal timestamps
+  // 3. If End-to-End AI Analysis succeeded: extract high-quality Start & End keyframes
   if (e2eResult && Array.isArray(e2eResult.shots) && e2eResult.shots.length > 0) {
     const storyboardShots = [];
 
@@ -228,7 +489,6 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
       const shotData = e2eResult.shots[idx];
       const shotNum = shotData.shotNumber || idx + 1;
       
-      // Determine optimal keyframe timestamp recommended by AI
       let bestTs = shotData.bestKeyframeTimestamp !== undefined ? Number(shotData.bestKeyframeTimestamp) : null;
       if (bestTs === null || isNaN(bestTs)) {
         bestTs = shotData.timestamp !== undefined ? Number(shotData.timestamp) : null;
@@ -240,22 +500,27 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
       }
       bestTs = Math.max(0, Math.min(totalDuration - 0.1, bestTs));
 
-      // Extract high-resolution keyframe at this AI-identified timestamp (Stage 1: Spatial Previs)
-      const kf = await extractSingleKeyframe(videoPath, keyframesDir, bestTs, shotNum);
-
-      // Extract matching True Color frame at identical timestamp (Stage 2: True Color Reference)
-      let colorKf = null;
-      if (colorVideoPath && fs.existsSync(colorVideoPath)) {
-        try {
-          colorKf = await extractSingleKeyframe(colorVideoPath, keyframesDir, bestTs, `color_${shotNum}`);
-        } catch (err) {
-          console.warn(`Failed to extract companion color keyframe for shot ${shotNum}:`, err.message);
-        }
-      }
-
       const startTime = shotData.startTime !== undefined ? Number(shotData.startTime) : Math.round(bestTs * 10) / 10;
       const endTime = shotData.endTime !== undefined ? Number(shotData.endTime) : Math.min(totalDuration, startTime + 4);
       const duration = Math.max(1, Math.round((endTime - startTime) * 10) / 10);
+
+      // Extract Start & End Spatial Previs keyframes
+      const sTs = startTime;
+      const eTs = Math.max(startTime + 0.1, endTime - 0.05);
+      const startKf = await extractSingleKeyframe(videoPath, keyframesDir, sTs, `${shotNum}_start`);
+      const endKf = await extractSingleKeyframe(videoPath, keyframesDir, eTs, `${shotNum}_end`);
+
+      // Extract matching True Color companion frames (if available)
+      let startColorKf = null;
+      let endColorKf = null;
+      if (colorVideoPath && fs.existsSync(colorVideoPath)) {
+        try {
+          startColorKf = await extractSingleKeyframe(colorVideoPath, keyframesDir, sTs, `color_${shotNum}_start`);
+          endColorKf = await extractSingleKeyframe(colorVideoPath, keyframesDir, eTs, `color_${shotNum}_end`);
+        } catch (err) {
+          console.warn(`Failed to extract companion color keyframes for shot ${shotNum}:`, err.message);
+        }
+      }
 
       // Derive physical motion vectors and camera tracking from Spatial Previs video pixel vectors
       let derivedSpatial = null;
@@ -293,11 +558,15 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
         endTime,
         duration,
         keyframeTimestamp: Math.round(bestTs * 10) / 10,
-        keyframeUrl: kf?.frameUrl || null,
-        keyframePath: kf?.framePath || null,
-        colorFrameUrl: colorKf?.frameUrl || null,
-        colorFramePath: colorKf?.framePath || null,
-        description: shotData.description || `Cinematic shot capturing scene at ${bestTs.toFixed(1)}s.`,
+        keyframeUrl: startKf?.frameUrl || null,
+        keyframePath: startKf?.framePath || null,
+        endKeyframeUrl: endKf?.frameUrl || null,
+        endKeyframePath: endKf?.framePath || null,
+        colorFrameUrl: startColorKf?.frameUrl || null,
+        colorFramePath: startColorKf?.framePath || null,
+        endColorFrameUrl: endColorKf?.frameUrl || null,
+        endColorFramePath: endColorKf?.framePath || null,
+        description: shotData.description || `Cinematic shot capturing scene from ${startTime.toFixed(1)}s to ${endTime.toFixed(1)}s.`,
         cameraMotion: spatialContinuity.cameraTrajectory || shotData.cameraMotion || 'Dolly Forward',
         spatialContinuity,
         status: 'pending',
@@ -308,7 +577,7 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
 
     return {
       storyboardShots,
-      analysisSummary: e2eResult.analysisSummary || 'End-to-end video deconstruction aligned with manual user context.',
+      analysisSummary: e2eResult.analysisSummary || highLevelContext || 'End-to-end video deconstruction aligned with manual user context.',
       detectedPacing: e2eResult.detectedPacing || 'Cinematic Pace'
     };
   }
@@ -338,12 +607,17 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
     const defaultSpatial = defaultSpatialCycle[idx % defaultSpatialCycle.length];
     const userHint = userDescription ? ` Context: ${userDescription}.` : '';
 
-    let colorKf = null;
+    const startKf = kf;
+    const endKf = await extractSingleKeyframe(videoPath, keyframesDir, Math.max(kf.startTime + 0.1, kf.endTime - 0.05), `${kf.shotNumber}_end`);
+
+    let startColorKf = null;
+    let endColorKf = null;
     if (colorVideoPath && fs.existsSync(colorVideoPath)) {
       try {
-        colorKf = await extractSingleKeyframe(colorVideoPath, keyframesDir, kf.timestamp, `color_${kf.shotNumber}`);
+        startColorKf = await extractSingleKeyframe(colorVideoPath, keyframesDir, kf.startTime, `color_${kf.shotNumber}_start`);
+        endColorKf = await extractSingleKeyframe(colorVideoPath, keyframesDir, Math.max(kf.startTime + 0.1, kf.endTime - 0.05), `color_${kf.shotNumber}_end`);
       } catch (err) {
-        console.warn(`Failed to extract fallback color keyframe for shot ${kf.shotNumber}:`, err.message);
+        console.warn(`Failed to extract fallback color keyframes for shot ${kf.shotNumber}:`, err.message);
       }
     }
 
@@ -355,10 +629,14 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
       endTime: kf.endTime,
       duration: kf.duration,
       keyframeTimestamp: kf.timestamp,
-      keyframeUrl: kf.keyframeUrl,
-      keyframePath: kf.keyframePath,
-      colorFrameUrl: colorKf?.frameUrl || null,
-      colorFramePath: colorKf?.framePath || null,
+      keyframeUrl: startKf?.frameUrl || kf.keyframeUrl,
+      keyframePath: startKf?.framePath || kf.keyframePath,
+      endKeyframeUrl: endKf?.frameUrl || null,
+      endKeyframePath: endKf?.framePath || null,
+      colorFrameUrl: startColorKf?.frameUrl || null,
+      colorFramePath: startColorKf?.framePath || null,
+      endColorFrameUrl: endColorKf?.frameUrl || null,
+      endColorFramePath: endColorKf?.framePath || null,
       description: `Visual action sequence capturing framing at ${kf.timestamp}s.${userHint}`,
       cameraMotion: defaultMotion,
       spatialContinuity: { ...defaultSpatial },
@@ -370,7 +648,7 @@ async function analyzeAndDeconstructVideo({ videoPath, colorVideoPath = null, ke
 
   return {
     storyboardShots,
-    analysisSummary: userDescription ? `Analysis deconstructed using user context: "${userDescription}".` : 'Deconstructed using uniform time sampling.',
+    analysisSummary: userDescription ? `Analysis deconstructed using user context: "${userDescription}".` : (highLevelContext || 'Deconstructed using uniform time sampling.'),
     detectedPacing: 'Standard Pace'
   };
 }
@@ -426,9 +704,8 @@ function compileContinuityDirectives(currentShot, previousShot = null, reference
 
   return directives.join('. ');
 }
-
-// Multi-modal Fal.ai Any-LLM Vision: End-to-End narrative analysis, spatial continuity, and optimal keyframe selection
-async function analyzeEndToEndWithFal(samples, totalDuration, userDescription, apiKey) {
+// Multi-modal Fal.ai Any-LLM Vision: End-to-End narrative analysis, spatial continuity, and optimal keyframe selection
+async function analyzeEndToEndWithFal(samples, totalDuration, userDescription, apiKey, highLevelContext = '') {
   const selectedSamples = samples.slice(0, 8);
   const imageUrls = selectedSamples.map(s => {
     const ext = path.extname(s.filePath).toLowerCase();
@@ -440,6 +717,9 @@ async function analyzeEndToEndWithFal(samples, totalDuration, userDescription, a
 
   const prompt = `You are an expert cinematic director, continuity supervisor, and film editor conducting an end-to-end narrative, visual, and spatial continuity analysis on a video.
 
+SEQUENCE HIGH-LEVEL CONTEXT:
+"${(highLevelContext || '').trim() || 'No prior sequence context established.'}"
+
 USER MANUAL VIDEO DESCRIPTION & CONTEXT:
 "${(userDescription || '').trim() || 'No manual description provided.'}"
 
@@ -448,9 +728,9 @@ Total Duration: ${totalDuration.toFixed(1)} seconds.
 Chronological sample frames provided: ${timestampsStr}.
 
 INSTRUCTIONS:
-1. Treat the user's manual video description as the story/narrative ground truth, and correlate it with the visual progression in the frames.
+1. Treat the sequence high-level context and user's manual video description as the story/narrative ground truth, and correlate it with the visual progression in the frames.
 2. Formulate an overall "analysisSummary" (2-3 sentences explaining overarching narrative arc, visual tone, and pacing).
-3. Break the video down into 4 to 10 distinct, cohesive storyboard shots that best capture the story beats.
+3. Break the video down into distinct, cohesive storyboard shots that best capture the story beats.
 4. For EACH shot, specify the OPTIMAL keyframe timestamp "bestKeyframeTimestamp" (in seconds, e.g. 2.4) that provides the clearest visual moment.
 5. Provide a rich visual description for each shot combining the user's narrative context with visual action.
 6. Choose the best camera motion from: ["Dolly Forward", "Pan Right", "Pan Left", "Slow Zoom In", "Crane Down", "Orbit 360", "Static Cinematic"].
@@ -496,11 +776,14 @@ Respond with strictly valid JSON matching this schema:
 }
 
 // Multi-modal ChatGPT Vision: End-to-End narrative analysis, spatial continuity, and optimal keyframe selection
-async function analyzeEndToEndWithOpenAI(samples, totalDuration, userDescription, apiKey) {
+async function analyzeEndToEndWithOpenAI(samples, totalDuration, userDescription, apiKey, highLevelContext = '') {
   const content = [
     {
       type: 'text',
       text: `You are an expert cinematic director, continuity supervisor, and film editor conducting an end-to-end narrative, visual, and spatial continuity analysis on a video.
+
+SEQUENCE HIGH-LEVEL CONTEXT:
+"${(highLevelContext || '').trim() || 'No prior sequence context established.'}"
 
 USER MANUAL VIDEO DESCRIPTION & CONTEXT:
 "${(userDescription || '').trim() || 'No manual description provided.'}"
@@ -510,9 +793,9 @@ Total Duration: ${totalDuration.toFixed(1)} seconds.
 Below are ${samples.length} chronological sample frames extracted across the video from start to finish with their exact timestamps.
 
 INSTRUCTIONS:
-1. Treat the user's manual video description as the story/narrative ground truth, and correlate it with the visual progression in the frames.
+1. Treat the sequence high-level context and user's manual video description as the story/narrative ground truth, and correlate it with the visual progression in the frames.
 2. Formulate an overall "analysisSummary" (2-3 sentences explaining overarching narrative arc, visual tone, and pacing).
-3. Break the video down into 4 to 12 distinct, cohesive storyboard shots that best capture the story beats.
+3. Break the video down into distinct, cohesive storyboard shots that best capture the story beats.
 4. For EACH shot, specify the OPTIMAL keyframe timestamp "bestKeyframeTimestamp" (in seconds, e.g. 2.4) that provides the clearest visual moment.
 5. Provide a rich visual description for each shot combining the user's narrative context with visual action.
 6. Choose the best camera motion from: ["Dolly Forward", "Pan Right", "Pan Left", "Slow Zoom In", "Crane Down", "Orbit 360", "Static Cinematic"].
@@ -544,7 +827,6 @@ Respond with strictly valid JSON matching this schema:
         "eyelineMatch": "Looking Screen-Right",
         "cameraAngle": "Medium 50mm",
         "lightingOrigin": "Screen-Left Window Light (cool 5600K)",
-        "rule180Vector": "East Axis - subject faces screen-right"
       }
     }
   ]
@@ -595,10 +877,13 @@ Respond with strictly valid JSON matching this schema:
 }
 
 // Multi-modal Gemini Vision: End-to-End narrative analysis and optimal keyframe selection
-async function analyzeEndToEndWithGemini(samples, totalDuration, userDescription, apiKey) {
+async function analyzeEndToEndWithGemini(samples, totalDuration, userDescription, apiKey, highLevelContext = '') {
   const parts = [
     {
       text: `You are an expert cinematic director, continuity supervisor, and film editor conducting an end-to-end narrative, visual, and spatial continuity analysis on a video.
+
+SEQUENCE HIGH-LEVEL CONTEXT:
+"${(highLevelContext || '').trim() || 'No prior sequence context established.'}"
 
 USER MANUAL VIDEO DESCRIPTION & CONTEXT:
 "${(userDescription || '').trim() || 'No manual description provided.'}"
@@ -608,7 +893,7 @@ Total Duration: ${totalDuration.toFixed(1)} seconds.
 Below are ${samples.length} chronological sample frames extracted across the video from start to finish with their exact timestamps.
 
 INSTRUCTIONS:
-1. Treat the user's manual video description as the story/narrative ground truth, and correlate it with the visual progression in the frames.
+1. Treat the sequence high-level context and user's manual video description as the story/narrative ground truth, and correlate it with the visual progression in the frames.
 2. Formulate an overall "analysisSummary" (2-3 sentences explaining overarching narrative arc, visual tone, and pacing).
 3. Break the video down into distinct, cohesive storyboard shots that best capture the story beats.
 4. For EACH shot, specify the OPTIMAL keyframe timestamp "bestKeyframeTimestamp" (in seconds) that provides the clearest visual moment.
@@ -1059,11 +1344,13 @@ async function analyzeShotMotionDelta({
   endFramePath,
   colorStartFramePath = null,
   colorEndFramePath = null,
-  duration = 5,
+  duration = 4,
   shotNumber = 1,
   userDescription = '',
+  highLevelContext = '',
   falApiKey = '',
-  openaiApiKey = ''
+  openaiApiKey = '',
+  geminiApiKey = ''
 }) {
   const images = [];
   const sPath = (colorStartFramePath && fs.existsSync(colorStartFramePath)) ? colorStartFramePath : startFramePath;
@@ -1086,16 +1373,21 @@ async function analyzeShotMotionDelta({
 
   const prompt = `You are an expert cinematic director, camera tracker, and continuity supervisor analyzing a single film shot delimited by its exact Start Frame (Frame 1) and End Frame (Frame 2).
 
+SEQUENCE HIGH-LEVEL CONTEXT:
+"${(highLevelContext || userDescription || '').trim() || 'Cinematic sequence'}"
+
+USER MANUAL CONTEXT / SHOT HINT:
+"${(userDescription || '').trim() || 'Progression between Start Frame and End Frame'}"
+
 SHOT INFO:
 Shot Number: #${shotNumber}
 Duration: ${Number(duration).toFixed(1)} seconds
-Context / Story Beat: "${(userDescription || '').trim() || 'Cinematic sequence'}"
 
 INSTRUCTIONS:
-1. Compare Frame 1 (Start of Shot) directly against Frame 2 (End of Shot).
+1. Compare Frame 1 (Start of Shot) directly against Frame 2 (End of Shot) within the overarching sequence high-level context.
 2. Compute the exact physical motion vector: How did the focal subject move, rotate, scale, or accelerate?
-3. Compute the exact camera trajectory: Did the camera dolly forward, pan, crane down, orbit, or tilt?
-4. Formulate an evocative action description (1-2 sentences) capturing the progression from Start to End.
+3. Compute the exact camera trajectory: Did the camera dolly forward, pan, crane down, orbit, tilt, or lock?
+4. Formulate an evocative action description (1-2 sentences) capturing what occurs from Start to End and how it advances the scene described in the high-level context.
 5. Provide strict spatial continuity directives.
 
 Respond with strictly valid JSON matching this schema:
@@ -1115,14 +1407,14 @@ Respond with strictly valid JSON matching this schema:
   }
 }`;
 
-  if (falApiKey) {
+  if (falApiKey && falApiKey.trim()) {
     try {
       const falRes = await requestFalAnyLlmVision({
         apiKey: falApiKey,
         imageUrls: images.map(img => img.dataUri),
         prompt
       });
-      if (falRes && falRes.description) {
+      if (falRes && (falRes.description || falRes.title)) {
         return falRes;
       }
     } catch (e) {
@@ -1130,18 +1422,56 @@ Respond with strictly valid JSON matching this schema:
     }
   }
 
-  if (openaiApiKey) {
+  if (openaiApiKey && openaiApiKey.trim()) {
     try {
-      const openAiRes = await requestOpenAIVision({
-        apiKey: openaiApiKey,
-        images: images.map(img => img.dataUri),
-        prompt
-      });
-      if (openAiRes && openAiRes.description) {
-        return openAiRes;
+      const content = [
+        { type: 'text', text: prompt }
+      ];
+      for (const img of images) {
+        content.push({ type: 'text', text: `[${img.label}]:` });
+        content.push({
+          type: 'image_url',
+          image_url: { url: img.dataUri, detail: 'low' }
+        });
+      }
+      const payload = {
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content }],
+        response_format: { type: 'json_object' }
+      };
+      const response = await requestJson('https://api.openai.com/v1/chat/completions', {
+        'Authorization': `Bearer ${openaiApiKey.trim()}`
+      }, payload);
+      const raw = response.choices?.[0]?.message?.content;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && (parsed.description || parsed.title)) return parsed;
       }
     } catch (e) {
       console.warn('[VideoAnalysis] OpenAI vision shot delta failed:', e.message);
+    }
+  }
+
+  if (geminiApiKey && geminiApiKey.trim()) {
+    try {
+      const parts = [{ text: prompt }];
+      for (const img of images) {
+        const b64 = img.dataUri.split(',')[1];
+        parts.push({ text: `[${img.label}]:` });
+        parts.push({
+          inline_data: { mime_type: 'image/jpeg', data: b64 }
+        });
+      }
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.trim()}`;
+      const response = await requestJson(endpoint, {}, { contents: [{ parts }] });
+      const raw = response.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (raw) {
+        const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        if (parsed && (parsed.description || parsed.title)) return parsed;
+      }
+    } catch (e) {
+      console.warn('[VideoAnalysis] Gemini vision shot delta failed:', e.message);
     }
   }
 
@@ -1163,11 +1493,160 @@ Respond with strictly valid JSON matching this schema:
   };
 }
 
+
+/**
+ * Synthesizes director grease pen markup layers over 3D Spatial Previs into a unified action prompt.
+ */
+async function enhancePromptWithSpatialMarkup({
+  startFramePath,
+  endFramePath,
+  startMarkupPath = null,
+  endMarkupPath = null,
+  currentDescription = '',
+  highLevelContext = '',
+  cameraMotion = 'Dolly Forward',
+  shotNumber = 1,
+  falApiKey = '',
+  openaiApiKey = '',
+  geminiApiKey = ''
+}) {
+  const images = [];
+
+  // Start frame: prefer flattened markup if available, else raw start frame
+  const sPath = (startMarkupPath && fs.existsSync(startMarkupPath)) ? startMarkupPath : startFramePath;
+  if (sPath && fs.existsSync(sPath)) {
+    const ext = path.extname(sPath).toLowerCase();
+    const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
+    images.push({ label: 'Frame 1 (Start Frame with Director Grease Pen Markup)', dataUri: `data:${mime};base64,${fileToBase64(sPath)}` });
+  }
+
+  // End frame: prefer flattened markup if available, else raw end frame
+  const ePath = (endMarkupPath && fs.existsSync(endMarkupPath)) ? endMarkupPath : endFramePath;
+  if (ePath && fs.existsSync(ePath)) {
+    const ext = path.extname(ePath).toLowerCase();
+    const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
+    images.push({ label: 'Frame 2 (End Frame with Director Grease Pen Markup)', dataUri: `data:${mime};base64,${fileToBase64(ePath)}` });
+  }
+
+  if (images.length === 0) {
+    throw new Error('No valid start or end frame images provided for markup analysis');
+  }
+
+  const prompt = `You are an expert Virtual Production Supervisor, Director, and VFX Cinematographer analyzing director draw-overs and grease pen annotations on 3D spatial previz frames for an action sequence.
+
+Images provided:
+1. Frame 1 (Start Frame): 3D spatial blocking showing initial positions and layout. Any brightly colored grease pen annotations (arrows, circles, lines, callouts) represent the director's instructions for motion trajectories, velocity, entry angles, or focal emphasis.
+2. Frame 2 (End Frame): 3D spatial blocking showing concluding positions and layout with any ending director annotations.
+
+SEQUENCE HIGH-LEVEL CONTEXT (Ground Truth):
+"${(highLevelContext || currentDescription || '').trim() || 'Cinematic sequence'}"
+
+EXISTING SHOT DESCRIPTION:
+"${(currentDescription || '').trim() || 'Dynamic action progression'}"
+
+CAMERA MOTION SETTING:
+"${cameraMotion || 'Dolly Forward'}"
+
+TASK:
+Interpret the director's grease pen markings together with the 3D geometry progression between Frame 1 and Frame 2:
+- Directional arrows indicate flight paths, trajectory arcs, camera dolly/pan tracks, or weapon fire vectors.
+- Circles / boxes highlight key focal elements, points of impact, or clearance margins.
+- Lines show speed trails or relative movement against the background.
+
+Synthesize the existing shot description, the director's visual markup directives, and the overarching sequence context into a single, unified, punchy, and cinematic prompt. The prompt must describe the dynamic physical action, subject movement, velocity, and camera movement clearly so a video generation model can execute the shot with authentic choreography.
+
+Respond with strictly valid JSON matching this schema:
+{
+  "description": "Unified enhanced action prompt incorporating the director's markup vectors and spatial choreography...",
+  "cameraMotion": "Dolly Forward",
+  "markupInterpretation": "Brief summary of what the grease pen marks indicated"
+}`;
+
+  if (falApiKey && falApiKey.trim()) {
+    try {
+      const falRes = await requestFalAnyLlmVision({
+        apiKey: falApiKey,
+        imageUrls: images.map(img => img.dataUri),
+        prompt
+      });
+      if (falRes && falRes.description) {
+        return falRes;
+      }
+    } catch (e) {
+      console.warn('[VideoAnalysis] Fal Any-LLM markup enhancement failed, trying fallback:', e.message);
+    }
+  }
+
+  if (openaiApiKey && openaiApiKey.trim()) {
+    try {
+      const content = [
+        { type: 'text', text: prompt }
+      ];
+      for (const img of images) {
+        content.push({ type: 'text', text: `[${img.label}]:` });
+        content.push({
+          type: 'image_url',
+          image_url: { url: img.dataUri, detail: 'high' }
+        });
+      }
+      const payload = {
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content }],
+        response_format: { type: 'json_object' }
+      };
+      const response = await requestJson('https://api.openai.com/v1/chat/completions', {
+        'Authorization': `Bearer ${openaiApiKey.trim()}`
+      }, payload);
+      const raw = response.choices?.[0]?.message?.content;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.description) return parsed;
+      }
+    } catch (e) {
+      console.warn('[VideoAnalysis] OpenAI vision markup enhancement failed:', e.message);
+    }
+  }
+
+  if (geminiApiKey && geminiApiKey.trim()) {
+    try {
+      const parts = [{ text: prompt }];
+      for (const img of images) {
+        const b64 = img.dataUri.split(',')[1];
+        parts.push({ text: `[${img.label}]:` });
+        parts.push({
+          inline_data: { mime_type: 'image/jpeg', data: b64 }
+        });
+      }
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.trim()}`;
+      const response = await requestJson(endpoint, {}, { contents: [{ parts }] });
+      const raw = response.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (raw) {
+        const cleaned = raw.replace(/\`\`\`json\n?/g, '').replace(/\`\`\`\n?/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        if (parsed && parsed.description) return parsed;
+      }
+    } catch (e) {
+      console.warn('[VideoAnalysis] Gemini vision markup enhancement failed:', e.message);
+    }
+  }
+
+  // Fallback heuristic synthesis
+  const baseDesc = currentDescription.trim() || 'Dynamic action progression';
+  const enhancedFallback = `${baseDesc} Tracking along the director's spatial vector, moving dynamically with ${cameraMotion.toLowerCase()} framing as velocity accelerates through the designated trajectory.`;
+  return {
+    description: enhancedFallback,
+    cameraMotion: cameraMotion || 'Dolly Forward',
+    markupInterpretation: 'Heuristic alignment with spatial motion vector.'
+  };
+}
+
 module.exports = {
+  generateHighLevelContext,
   analyzeAndDeconstructVideo,
   generateImageToDescription,
   generateStyleBrief,
   compileContinuityDirectives,
-  analyzeShotMotionDelta
+  analyzeShotMotionDelta,
+  enhancePromptWithSpatialMarkup
 };
 
