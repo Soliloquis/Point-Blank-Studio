@@ -991,24 +991,16 @@ class StudioApp {
 
     // NLE Zoom Controls
     this.timelineZoomSlider?.addEventListener('input', () => {
-      this.timelineZoom = parseInt(this.timelineZoomSlider.value, 10) || 95;
-      this.renderTimeline();
+      const val = parseInt(this.timelineZoomSlider.value, 10) || 95;
+      this.applyTimelineZoom(val);
     });
 
     this.btnZoomOut?.addEventListener('click', () => {
-      if (this.timelineZoomSlider) {
-        this.timelineZoomSlider.value = Math.max(50, parseInt(this.timelineZoomSlider.value, 10) - 20);
-        this.timelineZoom = parseInt(this.timelineZoomSlider.value, 10);
-        this.renderTimeline();
-      }
+      this.applyTimelineZoom(this.timelineZoom - 20);
     });
 
     this.btnZoomIn?.addEventListener('click', () => {
-      if (this.timelineZoomSlider) {
-        this.timelineZoomSlider.value = Math.min(220, parseInt(this.timelineZoomSlider.value, 10) + 20);
-        this.timelineZoom = parseInt(this.timelineZoomSlider.value, 10);
-        this.renderTimeline();
-      }
+      this.applyTimelineZoom(this.timelineZoom + 20);
     });
 
     this.btnZoomFit?.addEventListener('click', () => this.fitTimelineZoom());
@@ -3703,32 +3695,36 @@ class StudioApp {
       a2: tl.filter(c => c.track === 'a2')
     };
 
-    // Calculate effective durations and track runtimes
+    // Calculate track positions and runtimes
     let maxRuntime = 0.1;
-    const transList = this.project.timelineTransitions || [];
+    let visualTrackDuration = 0;
 
-    // 1. Calculate visual sequence (V1) accounting for transitions
-    let v1Accum = 0;
-    tracks.v1.forEach((clip, idx) => {
+    // 1. Visual Sequence (V1)
+    let v1TrackAccum = 0;
+    tracks.v1.forEach((clip) => {
       const dur = Math.max(0.1, (clip.trimEnd || clip.duration) - (clip.trimStart || 0));
       clip.effectiveDuration = dur;
-      clip.trackStart = v1Accum;
-      clip.globalStart = v1Accum;
-      let transDur = 0;
-      if (idx < tracks.v1.length - 1) {
-        const tr = transList[idx] || { type: 'dissolve', duration: 0.8 };
-        if (tr.type !== 'cut') {
-          const next = tracks.v1[idx + 1];
-          const nextDur = Math.max(0.1, (next.trimEnd || next.duration || 4) - (next.trimStart || 0));
-          transDur = Math.min(Number(tr.duration !== undefined ? tr.duration : 0.8), dur * 0.48, nextDur * 0.48);
-        }
-      }
-      v1Accum += (dur - transDur);
+      clip.trackStart = v1TrackAccum;
+      clip.globalStart = v1TrackAccum;
+      v1TrackAccum += dur;
     });
-    if (v1Accum > maxRuntime) maxRuntime = v1Accum;
+    visualTrackDuration = v1TrackAccum;
+    if (v1TrackAccum > maxRuntime) maxRuntime = v1TrackAccum;
 
-    // 2. Calculate remaining tracks (V2, A1, A2)
-    ['v2', 'a1', 'a2'].forEach(tKey => {
+    // 2. Overlay Track (V2)
+    let v2TrackAccum = 0;
+    tracks.v2.forEach((clip) => {
+      const dur = Math.max(0.1, (clip.trimEnd || clip.duration) - (clip.trimStart || 0));
+      clip.effectiveDuration = dur;
+      clip.trackStart = v2TrackAccum;
+      clip.globalStart = v2TrackAccum;
+      v2TrackAccum += dur;
+    });
+    if (v2TrackAccum > visualTrackDuration) visualTrackDuration = v2TrackAccum;
+    if (v2TrackAccum > maxRuntime) maxRuntime = v2TrackAccum;
+
+    // 3. Audio Tracks (A1, A2)
+    ['a1', 'a2'].forEach(tKey => {
       let accum = 0;
       tracks[tKey].forEach(clip => {
         const dur = Math.max(0.1, (clip.trimEnd || clip.duration) - (clip.trimStart || 0));
@@ -3770,31 +3766,25 @@ class StudioApp {
           <div class="trim-handle trim-right" data-action="trim-right" title="Drag to adjust Out-Point"></div>
         `;
       } else {
-        // Audio clip card with waveform bars
-        const barCount = Math.max(6, Math.floor(widthPx / 5));
-        let waveHtml = '';
-        for (let b = 0; b < barCount; b++) {
-          const heightPct = Math.floor(20 + Math.abs(Math.sin((b + index * 3) * 0.7)) * 75);
-          waveHtml += `<div class="nle-audio-wave-bar" style="height:${heightPct}%;"></div>`;
-        }
+        // Audio clip card with time-anchored canvas waveform
         el.innerHTML = `
-          <span class="nle-audio-stem-title">🎵 ${this.escapeHtml(clip.title || 'Audio')}</span>
-          <div class="nle-audio-waveform-bars">${waveHtml}</div>
+          <div class="clip-item-header">
+            <span class="clip-item-title">${trackType === 'a1' ? '🎙️ ' : '🎵 '}${this.escapeHtml(clip.title || 'Audio Stem')}</span>
+            <span class="clip-duration-chip">${dur.toFixed(1)}s</span>
+          </div>
+          <canvas class="nle-audio-waveform-canvas" width="${widthPx}" height="24"></canvas>
           <div class="trim-handle trim-left" data-action="trim-left" title="Drag to adjust In-Point"></div>
           <div class="trim-handle trim-right" data-action="trim-right" title="Drag to adjust Out-Point"></div>
         `;
+        const canvas = el.querySelector('.nle-audio-waveform-canvas');
+        if (canvas) {
+          this.drawTimeAnchoredWaveform(canvas, clip, dur, widthPx, trackType);
+        }
       }
 
       el.addEventListener('click', (e) => {
         if (!e.target.classList.contains('trim-handle')) {
           this.selectTimelineClip(clip);
-          if (clip.track !== 'a1' && clip.track !== 'a2' && clip.type !== 'audio') {
-            const clipIdx = tl.indexOf(clip);
-            if (clipIdx !== -1) this.cueTimelineClip(clipIdx, false);
-          } else {
-            const seekSec = clip.trackStart !== undefined ? clip.trackStart : (clip.globalStart || 0);
-            this.seekTimelineTo(seekSec);
-          }
         }
       });
 
@@ -3808,21 +3798,107 @@ class StudioApp {
     if (a1Track) tracks.a1.forEach((c, i) => renderClipCard(c, i, a1Track, 'a1'));
     if (a2Track) tracks.a2.forEach((c, i) => renderClipCard(c, i, a2Track, 'a2'));
 
-    // 2. Render Ruler Ticks
+    // Visual Sequence End Marker on audio tracks if audio extends beyond visual edit
+    if (visualTrackDuration > 0 && maxRuntime > visualTrackDuration + 0.3) {
+      const markerPx = Math.round(visualTrackDuration * this.timelineZoom);
+      const marker = document.createElement('div');
+      marker.className = 'nle-sequence-end-marker';
+      marker.style.left = `${markerPx}px`;
+      marker.title = `Visual Sequence End (${visualTrackDuration.toFixed(1)}s)`;
+      if (a1Track) a1Track.appendChild(marker.cloneNode(true));
+      if (a2Track) a2Track.appendChild(marker);
+    }
+
+    // 2. Synchronize track & ruler scrollable widths
+    const wrapperWidth = this.timelineTrackWrapper?.clientWidth || 1600;
+    const totalWidthPx = Math.max(wrapperWidth, Math.round(totalDuration * this.timelineZoom) + 200);
+    const lanesContainer = document.querySelector('.nle-lanes-container');
+    if (lanesContainer) lanesContainer.style.width = `${totalWidthPx}px`;
+    if (this.timelineRuler) this.timelineRuler.style.width = `${totalWidthPx}px`;
+
+    // 3. Render Ruler Ticks
     this.renderRulerTicks(totalDuration);
 
-    // 3. Update Metrics
+    // 4. Update Metrics
     if (this.timelineTotalDuration) {
       this.timelineTotalDuration.textContent = this.formatTime(totalDuration);
     }
 
-    // 4. Update Inspector if clip is active
+    // 5. Update Inspector if clip is active
     if (this.selectedTimelineClipId) {
       const activeClip = tl.find((c) => c.timelineId === this.selectedTimelineClipId);
       if (activeClip) {
         this.selectTimelineClip(activeClip);
       } else {
         this.selectedTimelineClipId = null;
+      }
+    }
+  }
+
+  drawTimeAnchoredWaveform(canvas, clip, dur, widthPx, trackType) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const h = canvas.height;
+    const centerY = h / 2;
+    ctx.clearRect(0, 0, widthPx, h);
+
+    const stepPx = 3;
+    const barWidth = 2;
+    const isA1 = trackType === 'a1';
+
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    if (isA1) {
+      grad.addColorStop(0, '#34d399');
+      grad.addColorStop(0.5, '#10b981');
+      grad.addColorStop(1, '#059669');
+    } else {
+      grad.addColorStop(0, '#fde68a');
+      grad.addColorStop(0.5, '#fbbf24');
+      grad.addColorStop(1, '#d97706');
+    }
+    ctx.fillStyle = grad;
+
+    const trimStart = clip.trimStart || 0;
+    const zoom = this.timelineZoom;
+    const seed = (clip.timelineId ? clip.timelineId.charCodeAt(clip.timelineId.length - 1) : 42) % 17;
+
+    for (let x = 0; x < widthPx; x += stepPx) {
+      // Deterministic multi-frequency harmonic synthesis locked to actual timeline seconds (t)
+      // When zooming, these peaks and troughs visibly stretch and expand in exact proportion to the zoom level!
+      const t = trimStart + (x / zoom);
+      const beat = Math.abs(Math.sin(t * Math.PI * 2.0));
+      const phrase = Math.abs(Math.sin(t * Math.PI * 0.35 + seed));
+      const mid = Math.abs(Math.sin(t * 11.3 + seed * 1.5));
+      const transient = Math.abs(Math.sin(t * 37.7 + seed * 3.1));
+
+      const raw = (beat * 0.45 + mid * 0.25 + transient * 0.15 + 0.1) * (0.55 + phrase * 0.45);
+      const amp = Math.min(1.0, Math.max(0.12, raw));
+      const barH = Math.max(2, Math.round(amp * (centerY - 1)));
+
+      ctx.fillRect(x, centerY - barH, barWidth, barH * 2);
+    }
+  }
+
+  applyTimelineZoom(newZoom, resetScroll = false) {
+    const clampedZoom = Math.max(40, Math.min(220, Math.round(newZoom)));
+    const curTime = this.getCurrentGlobalTimelineTime();
+    const wrapper = this.timelineTrackWrapper;
+
+    const oldPlayheadPx = Math.round(curTime * this.timelineZoom);
+    const viewportOffset = wrapper ? (oldPlayheadPx - wrapper.scrollLeft) : 0;
+
+    this.timelineZoom = clampedZoom;
+    if (this.timelineZoomSlider) this.timelineZoomSlider.value = clampedZoom;
+
+    this.renderTimeline();
+    this.updatePlayheadUi(curTime);
+
+    if (wrapper) {
+      if (resetScroll) {
+        wrapper.scrollLeft = 0;
+      } else {
+        const newPlayheadPx = Math.round(curTime * clampedZoom);
+        wrapper.scrollLeft = Math.max(0, newPlayheadPx - viewportOffset);
       }
     }
   }
@@ -3855,14 +3931,24 @@ class StudioApp {
   fitTimelineZoom() {
     const tl = this.project.timeline;
     if (!tl || tl.length === 0 || !this.timelineTrackWrapper) return;
-    let total = 0;
-    tl.forEach((c) => total += Math.max(0.1, (c.trimEnd || c.duration) - (c.trimStart || 0)));
-    const wrapperWidth = this.timelineTrackWrapper.clientWidth - 160;
-    if (total > 0 && wrapperWidth > 100) {
-      const newZoom = Math.max(50, Math.min(220, Math.floor(wrapperWidth / total)));
-      this.timelineZoom = newZoom;
-      if (this.timelineZoomSlider) this.timelineZoomSlider.value = newZoom;
-      this.renderTimeline();
+
+    // Fit to primary visual edit runtime if visual clips exist, otherwise total duration
+    const visualClips = this.getVisualTimelineClips();
+    let fitDur = 0;
+    if (visualClips.length > 0) {
+      visualClips.forEach(c => {
+        const start = c.globalStart !== undefined ? c.globalStart : (c.trackStart || 0);
+        const dur = c.effectiveDuration || Math.max(0.1, (c.trimEnd || c.duration) - (c.trimStart || 0));
+        if (start + dur > fitDur) fitDur = start + dur;
+      });
+    } else {
+      fitDur = this.getSequenceTotalDuration();
+    }
+
+    const wrapperWidth = this.timelineTrackWrapper.clientWidth - 120;
+    if (fitDur > 0 && wrapperWidth > 100) {
+      const optimalZoom = Math.max(40, Math.min(220, Math.floor(wrapperWidth / fitDur)));
+      this.applyTimelineZoom(optimalZoom, true);
     }
   }
 
@@ -4035,8 +4121,16 @@ class StudioApp {
     const curTime = isAnimatic ? (this.animaticCurrentTime || 0) : (this.cinemaPlayer.currentTime || 0);
     const trimStart = clip.trimStart || 0;
     const trimEnd = clip.trimEnd || clip.duration;
+    const clipStart = clip.trackStart !== undefined ? clip.trackStart : (clip.globalStart || 0);
+    const clipDur = clip.effectiveDuration || Math.max(0.1, trimEnd - trimStart);
+    const globalPlayheadTime = this.getCurrentGlobalTimelineTime();
 
-    let splitPoint = curTime;
+    let splitPoint;
+    if (globalPlayheadTime >= clipStart && globalPlayheadTime <= (clipStart + clipDur)) {
+      splitPoint = trimStart + (globalPlayheadTime - clipStart);
+    } else {
+      splitPoint = curTime;
+    }
     if (splitPoint <= trimStart + 0.3 || splitPoint >= trimEnd - 0.3) {
       splitPoint = trimStart + (trimEnd - trimStart) / 2;
     }
