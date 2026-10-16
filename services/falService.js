@@ -405,21 +405,9 @@ class FalService {
     // 0. Nano Banana Pro (Primary Reasoning Engine applying Visual Anchor Style Bible)
     if (requestedModel.includes('nano-banana') || !modelEndpoint || requestedModel === 'fal-ai/nano-banana-pro/edit') {
       try {
-        console.log('[Fal Restyle] Running Nano Banana Pro with Visual Anchor Style Bible...');
+        console.log('[Fal Restyle] Running Nano Banana Pro with Visual Anchor Style Bible (Zero Image Donor Bleed)...');
+        // Do NOT pass styleImagePath as an image donor to prevent semantic character/cliff transplantation
         const nanoImageUrls = [imageDataUri];
-        
-        let hasStyleImage = false;
-        if (styleImagePath && fs.existsSync(styleImagePath)) {
-          try {
-            const sExt = path.extname(styleImagePath).toLowerCase();
-            const sMime = sExt === '.png' ? 'image/png' : 'image/jpeg';
-            const sB64 = fs.readFileSync(styleImagePath).toString('base64');
-            nanoImageUrls.push(`data:${sMime};base64,${sB64}`);
-            hasStyleImage = true;
-          } catch (e) {
-            console.warn('Failed to encode styleImagePath for Nano Banana Pro:', e.message);
-          }
-        }
 
         if (assignedReferences && assignedReferences.length > 0) {
           assignedReferences.forEach(ref => {
@@ -430,26 +418,34 @@ class FalService {
                 const rB64 = fs.readFileSync(ref.imagePath).toString('base64');
                 nanoImageUrls.push(`data:${rMime};base64,${rB64}`);
               } catch (e) {
-                console.warn('Failed to encode asset image for Nano Banana Pro:', e.message);
+                console.warn('Failed to encode asset image for Nano Banana Pro:', ref.name, e.message);
               }
             }
           });
         }
 
+        const paletteTokens = Array.isArray(styleBible?.palette) && styleBible.palette.length > 0
+          ? styleBible.palette.join(', ')
+          : '';
+
         let nanoBrief = `Cinematic Art Director Restyling Brief:
 Scene Subject & Action: ${prompt || 'Cinematic composition'}.
 ${playblastDirective ? playblastDirective + '\n' : ''}
-Visual Anchor Style Bible Application:
-Image 1 is the 3D scene composition and layout.
-${hasStyleImage ? 'Image 2 is the Visual Anchor Style Reference. Strictly apply the visual aesthetic, lighting, palette, and medium of Image 2 to the scene.' : 'Apply the Style Bible aesthetic strictly to the scene.'}
-- Medium: ${styleBible?.medium || 'Rich painterly digital illustration'}
-- Lighting: ${styleBible?.lighting || 'Dramatic cinematic lighting, volumetric haze, cohesive rim lighting'}
-- Texture & Surface: ${styleBible?.grain || 'Fine canvas impasto, rich material detail'}
-- Camera & Optics: ${styleBible?.cameraFeel || 'Cinematic widescreen, atmospheric depth'}
-${styleBible?.palette && styleBible.palette.length ? `- Color Palette: ${styleBible.palette.join(', ')}` : ''}
-${consistencyDirectives.length ? `Consistent Asset Identifiers: ${consistencyDirectives.join('; ')}` : ''}
-${spatialParts.length ? `Spatial Alignment: ${spatialParts.join(', ')}` : ''}
-Mandate: Maintain the exact 3D spatial layout, perspective lines, and canonical asset silhouettes from Image 1 while rendering with the rich lighting and painterly medium of the Visual Anchor.`;
+
+VISUAL STYLE BIBLE MATRIX (STRICT TEXT & TOKEN CONDITIONING):
+- Master Style Brief: ${styleBrief || styleBible?.brief || 'Rich painterly digital illustration evoking a sense of melancholic wonder with dramatic atmospheric sunset tones.'}
+- Medium & Technique: ${styleBible?.medium || 'Stylized Digital Painting'}
+- Surface Texture & Grain: ${styleBible?.grain || 'Fine Canvas Impasto, rich brushwork texture'}
+- Lighting Architecture: ${styleBible?.lighting || 'Dramatic sunset lighting with strong side- and backlighting, casting deep defined shadows and warm orange volumetric glow.'}
+- Camera & Optics: ${styleBible?.cameraFeel || 'Cinematic widescreen 2.39:1, deep focus with atmospheric depth'}
+${paletteTokens ? `- Dominant Color Palette (Strictly Enforce): ${paletteTokens}` : ''}
+${consistencyDirectives.length ? `- Consistent Asset Identifiers: ${consistencyDirectives.join('; ')}` : ''}
+${spatialParts.length ? `- Spatial Continuity: ${spatialParts.join(', ')}` : ''}
+
+CRITICAL PRESERVATION MANDATE:
+- Maintain 100% of the exact 3D spatial layout, perspective lines, spacecraft hulls, terrain, and scene composition from Image 1.
+- Apply the lighting, color grading, brushwork texture, and atmospheric tone from the Style Bible strictly to the existing scene elements.
+- NEGATIVE: Do NOT introduce new characters, people, musical instruments, banjos, cliff ledges, or foreign geometry not present in the scene composition.`;
 
         const nanoPayload = {
           prompt: nanoBrief,

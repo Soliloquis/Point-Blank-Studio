@@ -97,9 +97,12 @@ async function computeMaskBoundsAndQuad(maskPath) {
 /**
  * Extract isolated transparent layers for each Consistent Asset and create a cleaned background.
  */
-async function extractShotLayers({ shot, project, outputDir, falService }) {
-  const spatialPath = shot.keyframePath;
-  const colorPath = (shot.colorFramePath && fs.existsSync(shot.colorFramePath)) ? shot.colorFramePath : shot.keyframePath;
+async function extractShotLayers({ shot, project, outputDir, falService, targetFrame = 'start' }) {
+  const isEnd = targetFrame === 'end';
+  const spatialPath = isEnd ? (shot.endKeyframePath || shot.keyframePath) : shot.keyframePath;
+  const colorPath = isEnd
+    ? ((shot.endColorFramePath && fs.existsSync(shot.endColorFramePath)) ? shot.endColorFramePath : spatialPath)
+    : ((shot.colorFramePath && fs.existsSync(shot.colorFramePath)) ? shot.colorFramePath : spatialPath);
 
   if (!fs.existsSync(spatialPath)) {
     throw new Error('Spatial Previs Keyframe file not found');
@@ -224,7 +227,7 @@ async function extractShotLayers({ shot, project, outputDir, falService }) {
   }
 
   // 2. Generate Clean Background Layer (Inpaint/Remove foreground assets from True Color canvas)
-  const bgFilename = `layer_bg_${shot.id}_${ts}.png`;
+  const bgFilename = `layer_bg_${shot.id}_${targetFrame}_${ts}.png`;
   const bgPath = path.join(outputDir, bgFilename);
 
   if (unionMaskPaths.length > 0) {
@@ -287,7 +290,7 @@ async function extractShotLayers({ shot, project, outputDir, falService }) {
   }
 
   const bgLayer = {
-    id: `layer_bg_${shot.id}`,
+    id: `layer_bg_${shot.id}_${targetFrame}`,
     assetId: 'background',
     assetName: 'Clean Background',
     category: 'environment',
@@ -449,9 +452,10 @@ Aesthetic: ${styleBible?.medium || 'Gritty hand-drawn concept art style'}.`;
 /**
  * Bake client perspective canvas composite and apply optional style harmonization
  */
-async function bakeAndCommitComposite({ shot, bakedImageBase64, harmonyStrength = 0.20, styleBible, styleImagePath = null, model = 'fal-ai/nano-banana-pro/edit', outputDir, falService }) {
+async function bakeAndCommitComposite({ shot, bakedImageBase64, harmonyStrength = 0.20, styleBible, styleImagePath = null, model = 'fal-ai/nano-banana-pro/edit', outputDir, falService, targetFrame = 'start' }) {
   const ts = Date.now();
-  const rawCompositeFilename = `styled_composite_${shot.id}_${ts}.png`;
+  const isEnd = targetFrame === 'end';
+  const rawCompositeFilename = `styled_composite_${shot.id}_${isEnd ? 'end_' : ''}${ts}.png`;
   const rawCompositePath = path.join(outputDir, rawCompositeFilename);
 
   // Strip data:image/...;base64, header
@@ -508,29 +512,29 @@ async function bakeAndCommitComposite({ shot, bakedImageBase64, harmonyStrength 
           method = 'layered-compositor-flux-harmonized';
         }
       } else {
-        // Default: Nano Banana Pro (Multimodal Reasoning & Style Bible Integration)
+        // Default: Nano Banana Pro (Token & Style Bible Matrix Conditioning - Zero Image Donor Bleed)
         const harmonyImageUrls = [`data:image/png;base64,${base64Data}`];
-        let hasStyleImage = false;
-        if (styleImagePath && fs.existsSync(styleImagePath)) {
-          try {
-            const sExt = path.extname(styleImagePath).toLowerCase();
-            const sMime = sExt === '.png' ? 'image/png' : 'image/jpeg';
-            const sB64 = fs.readFileSync(styleImagePath).toString('base64');
-            harmonyImageUrls.push(`data:${sMime};base64,${sB64}`);
-            hasStyleImage = true;
-          } catch (e) {
-            console.warn('Failed to encode styleImagePath for harmony:', e.message);
-          }
-        }
+
+        const paletteStr = Array.isArray(styleBible?.palette) && styleBible.palette.length > 0
+          ? styleBible.palette.join(', ')
+          : '';
 
         let harmonyPrompt = `Perform seamless cinematic style harmonization and lighting integration on this composite scene.
-Image 1 is the assembled multi-layer scene layout.
-${hasStyleImage ? 'Image 2 is the Visual Anchor Style Bible reference. Strictly match its lighting tone, color palette, and medium.' : ''}
-Integration Mandate:
-- Cast ambient bounce lighting and rim lights from background celestial bodies/light sources onto foreground vessels and objects.
+Input Image is the assembled multi-layer scene layout.
+
+STYLE BIBLE MATRIX SPECIFICATION (STRICT CONDITIONING):
+- Artistic Style & Mood: ${styleBible?.styleBrief || 'Stylized painterly digital concept art, rich atmospheric depth and melancholic wonder.'}
+- Rendering Medium: ${styleBible?.medium || 'Stylized Digital Painting'}
+- Surface Texture & Grain: ${styleBible?.grain || 'Fine Canvas Impasto, rich brushwork texture'}
+- Lighting Architecture: ${styleBible?.lighting || 'Dramatic sunset lighting with strong side- and backlighting, casting deep defined shadows and warm volumetric glow.'}
+- Camera & Optics: ${styleBible?.cameraFeel || 'Cinematic widescreen 2.39:1, atmospheric depth and sharp focus.'}
+${paletteStr ? `- Dominant Color Palette (Strictly Enforce): ${paletteStr}` : ''}
+
+CRITICAL INTEGRATION & PRESERVATION MANDATE:
+- Retain 100% of the exact spatial composition, hull geometry, spacecraft, perspective alignment, and background from the Input Image.
+- Cast cohesive directional bounce lighting and rim lights from background celestial bodies/light sources onto foreground vessels and objects.
 - Wrap natural volumetric atmospheric haze and depth cues around all asset contact seams.
-- Apply the fine canvas impasto, lineart texture, and painterly finish from the Style Bible: ${styleBible?.medium || 'Rich painterly concept art'}, ${styleBible?.grain || 'Fine Canvas Impasto'}.
-- Retain the exact spatial positions, perspective alignment, hull geometry, and hazard markings from Image 1.`;
+- NEGATIVE: Do NOT introduce new characters, people, musical instruments, banjos, cliff ledges, or foreign geometry not present in the Input Image. Harmonize ONLY the existing scene elements.`;
 
         const harmRes = await falService.runQueueJob('fal-ai/nano-banana-pro/edit', {
           prompt: harmonyPrompt,
@@ -550,21 +554,33 @@ Integration Mandate:
   }
 
   // Update shot record
-  shot.compositeKeyframeUrl = `/storage/keyframes/${rawCompositeFilename}`;
-  shot.compositeKeyframePath = rawCompositePath;
-  shot.compositeAt = ts;
-  shot.styledKeyframeUrl = finalImageUrl;
-  shot.styledKeyframePath = finalImagePath;
-  shot.styledAt = ts;
-  shot.restyleMethod = method;
-  shot.restyleStrength = harmonyStrength;
+  if (isEnd) {
+    shot.compositeEndKeyframeUrl = `/storage/keyframes/${rawCompositeFilename}`;
+    shot.compositeEndKeyframePath = rawCompositePath;
+    shot.compositeEndAt = ts;
+    shot.styledEndKeyframeUrl = finalImageUrl;
+    shot.styledEndKeyframePath = finalImagePath;
+    shot.styledEndAt = ts;
+    shot.endRestyleMethod = method;
+    shot.endRestyleStrength = harmonyStrength;
+  } else {
+    shot.compositeKeyframeUrl = `/storage/keyframes/${rawCompositeFilename}`;
+    shot.compositeKeyframePath = rawCompositePath;
+    shot.compositeAt = ts;
+    shot.styledKeyframeUrl = finalImageUrl;
+    shot.styledKeyframePath = finalImagePath;
+    shot.styledAt = ts;
+    shot.restyleMethod = method;
+    shot.restyleStrength = harmonyStrength;
+  }
 
   return {
     success: true,
     shot,
-    compositeKeyframeUrl: shot.compositeKeyframeUrl,
-    styledKeyframeUrl: finalImageUrl,
-    styledKeyframePath: finalImagePath,
+    targetFrame,
+    compositeKeyframeUrl: isEnd ? shot.compositeEndKeyframeUrl : shot.compositeKeyframeUrl,
+    styledKeyframeUrl: isEnd ? shot.styledEndKeyframeUrl : shot.styledKeyframeUrl,
+    styledKeyframePath: isEnd ? shot.styledEndKeyframePath : shot.styledKeyframePath,
     method
   };
 }
