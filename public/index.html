@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.2.0">
+  <link rel="stylesheet" href="style.css?v=2.6.0">
 </head>
 <body>
   <!-- Top App Header -->
@@ -1193,6 +1193,10 @@
                 <input type="checkbox" id="chk-layer-show-grid" checked>
                 <span>Grid & Wireframes</span>
               </label>
+              <label class="toggle-checkbox" style="font-size:0.75rem; color:#ffe600; cursor:pointer;" title="Overlay Spatial Previs Markup (Perspective & Orientation lines)">
+                <input type="checkbox" id="chk-layer-show-markup">
+                <span>✏️ Previs Markup</span>
+              </label>
             </div>
           </div>
         </div>
@@ -1257,14 +1261,32 @@
                   <span style="font-size:0.72rem; font-weight:700; color:var(--accent-gold); text-transform:uppercase; letter-spacing:0.04em;">3D Consistent Angle (GPT Flare):</span>
                   <span style="font-size:0.62rem; color:var(--accent-teal); font-weight:700; background:rgba(45,212,191,0.1); padding:1px 5px; border-radius:3px;">High Fidelity</span>
                 </div>
+
+                <!-- Spatial Previs Markup Alignment & Guidance -->
+                <div id="markup-guidance-box" style="margin-bottom:8px; padding:6px 8px; background:rgba(0,0,0,0.35); border-radius:4px; border:1px solid rgba(255,230,0,0.25);">
+                  <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <label class="toggle-checkbox" style="font-size:0.72rem; color:#ffe600; cursor:pointer; display:flex; align-items:center; gap:6px; font-weight:600;" title="Use Perspective Lines (Yellow) and Orientation Indicators (Blue/Orange) from Spatial Previs Markup">
+                      <input type="checkbox" id="chk-use-markup-guidance" checked>
+                      <span>🧭 Guide with Previs Markup</span>
+                    </label>
+                    <button type="button" class="btn btn-secondary btn-xs" id="btn-align-markup-angle" style="font-size:0.65rem; padding:1px 6px; border-color:rgba(255,230,0,0.4); color:#ffe600;" title="Analyze Yellow Perspective & Blue/Orange Orientation marks for this layer">
+                      ⚡ Align Now
+                    </button>
+                  </div>
+                  <div id="markup-guidance-status" style="font-size:0.65rem; color:var(--text-dim); margin-top:3px; margin-left:20px; line-height:1.2;">
+                    Yellow perspective lines &amp; Blue (Forward) / Orange (Backward) orientation
+                  </div>
+                </div>
                 
                 <div style="margin-top:4px;">
                   <select id="sel-layer-orientation" class="select-input" style="width:100%; font-size:0.75rem; padding:5px 8px; background:rgba(0,0,0,0.5); border:1px solid var(--border-subtle); color:var(--text-main); border-radius:4px;">
-                    <option value="Dynamic 3/4 perspective angle view, showing side profile, bow, and dorsal deck">Dynamic 3/4 Perspective Angle</option>
+                    <option value="Rear 3/4 Port to Aft View, camera viewing from behind with aft engines and thrusters facing camera, port flank receding toward bow">Rear 3/4 Port to Aft View</option>
+                    <option value="Rear 3/4 Starboard to Aft View, camera viewing from behind with aft engines and thrusters facing camera, starboard flank receding toward bow">Rear 3/4 Starboard to Aft View</option>
+                    <option value="Rear 3/4 angle view, showcasing aft thruster engines facing camera with bright exhaust plumes">Rear 3/4 Thrusters View</option>
+                    <option value="Front 3/4 angle view, facing forward toward camera highlighting bow and cockpit">Front 3/4 Bow View</option>
                     <option value="Side profile elevation view, full lateral view">Side Profile Elevation</option>
-                    <option value="Front 3/4 angle view, facing forward toward camera highlighting hammerhead bow">Front 3/4 Bow View</option>
-                    <option value="Rear 3/4 angle view, showcasing aft thruster engines with bright orange exhaust plumes">Rear 3/4 Thrusters View</option>
                     <option value="Top-down dorsal view showing entire deck layout and turret sponsons">Top-Down Dorsal View</option>
+                    <option value="Dynamic 3/4 perspective angle view, showing hull profile and deck">Dynamic 3/4 Perspective Angle</option>
                   </select>
                 </div>
 
@@ -2159,11 +2181,46 @@
       <div class="modal-body" style="padding:14px 18px; display:flex; flex-direction:column; gap:10px;">
         <!-- Drawing Toolbar -->
         <div class="grease-pen-toolbar">
-          <!-- Tools -->
-          <div class="gp-tool-group">
-            <button type="button" class="btn-gp-tool active" data-tool="pen" id="gp-tool-pen" title="Freehand Pen (Draw motion paths and contours)">✏️ Pen</button>
-            <button type="button" class="btn-gp-tool" data-tool="arrow" id="gp-tool-arrow" title="Trajectory Arrow (Click & drag to create directional vector arrow)">🏹 Arrow</button>
-            <button type="button" class="btn-gp-tool" data-tool="eraser" id="gp-tool-eraser" title="Eraser">🧹 Eraser</button>
+          <!-- 1. Camera Moves (Bright Red) -->
+          <div class="gp-workflow-group gp-group-camera">
+            <span class="gp-group-label" style="color:#ff3355;">🎥 CAMERA</span>
+            <button type="button" class="btn-gp-tool btn-camera" data-mode="camera-arrow" data-tool="arrow" data-color="#ff1e42" title="Straight Camera Move (Dolly, Pan, Push-in)">➔ Straight</button>
+            <button type="button" class="btn-gp-tool btn-camera" data-mode="camera-curved" data-tool="curved-arrow" data-color="#ff1e42" title="Curved Camera Move (Orbit, Arc, Roll, Crane)">⤹ Curved</button>
+          </div>
+
+          <div class="gp-separator"></div>
+
+          <!-- 2. Perspective Lines (Bright Yellow) -->
+          <div class="gp-workflow-group gp-group-perspective">
+            <span class="gp-group-label" style="color:#ffe600;">📐 PERSPECTIVE</span>
+            <button type="button" class="btn-gp-tool btn-perspective" data-mode="perspective-line" data-tool="line" data-color="#ffe600" title="Straight Perspective & Vanishing Point Guide Line">📏 Line</button>
+          </div>
+
+          <div class="gp-separator"></div>
+
+          <!-- 3. Orientation Indicator (Bright Blue / Orange) -->
+          <div class="gp-workflow-group gp-group-orientation">
+            <span class="gp-group-label" style="color:#00e5ff;">🧭 ORIENTATION</span>
+            <button type="button" class="btn-gp-tool btn-orientation-blue" data-mode="orientation-blue" data-tool="orientation" data-color="#00e5ff" title="Forward Facing Direction / Bow (Bright Blue)">🔵 Forward (Blue)</button>
+            <button type="button" class="btn-gp-tool btn-orientation-orange" data-mode="orientation-orange" data-tool="orientation" data-color="#ff8800" title="Backward / Aft / Stern Direction (Orange)">🟠 Backward (Orange)</button>
+          </div>
+
+          <div class="gp-separator"></div>
+
+          <!-- 4. Element Moves (Bright Green - No arrow = stationary) -->
+          <div class="gp-workflow-group gp-group-element">
+            <span class="gp-group-label" style="color:#00ff66;">🚀 ELEMENT MOVES</span>
+            <button type="button" class="btn-gp-tool btn-element active" data-mode="element-arrow" data-tool="arrow" data-color="#00ff66" title="Element Direction of Travel / Motion Vector (Green)">➔ Vector</button>
+            <button type="button" class="btn-gp-tool btn-element" data-mode="element-curved" data-tool="curved-arrow" data-color="#00ff66" title="Element Curved Flight Trajectory (Turn, bank, evasive curve)">⤹ Curve</button>
+          </div>
+
+          <div class="gp-separator"></div>
+
+          <!-- 5. Freehand Pen & Eraser -->
+          <div class="gp-workflow-group gp-group-freehand">
+            <span class="gp-group-label" style="color:#cbd5e1;">✏️ NOTES</span>
+            <button type="button" class="btn-gp-tool btn-freehand" data-mode="freehand-pen" data-tool="pen" data-color="#ffffff" title="Freehand Director Notes & Outlines (White)">✏️ Pen</button>
+            <button type="button" class="btn-gp-tool" data-mode="eraser" data-tool="eraser" title="Eraser">🧹 Eraser</button>
           </div>
 
           <div class="gp-separator"></div>
@@ -2174,18 +2231,6 @@
             <button type="button" class="btn-gp-size" data-size="3" title="Fine (3px)">Thin</button>
             <button type="button" class="btn-gp-size active" data-size="6" title="Medium (6px)">Med</button>
             <button type="button" class="btn-gp-size" data-size="12" title="Bold (12px)">Bold</button>
-          </div>
-
-          <div class="gp-separator"></div>
-
-          <!-- High-Contrast Neon Annotation Colors -->
-          <div class="gp-color-group">
-            <span class="gp-label">Color:</span>
-            <button type="button" class="gp-color-swatch active" data-color="#ff0055" style="background:#ff0055;" title="Neon Pink / Red (Trajectory / Acceleration)"></button>
-            <button type="button" class="gp-color-swatch" data-color="#00f0ff" style="background:#00f0ff;" title="Cyber Cyan (Camera Motion / Vector)"></button>
-            <button type="button" class="gp-color-swatch" data-color="#ffe600" style="background:#ffe600;" title="Electric Yellow (Focal Highlight / Caution)"></button>
-            <button type="button" class="gp-color-swatch" data-color="#00ff66" style="background:#00ff66;" title="Toxic Green (Flight Entry / Exit)"></button>
-            <button type="button" class="gp-color-swatch" data-color="#ffffff" style="background:#ffffff;" title="White (Contrast / Labels)"></button>
           </div>
 
           <div class="gp-separator"></div>
@@ -2205,8 +2250,11 @@
       </div>
 
       <div class="modal-footer" style="justify-content:space-between;">
-        <div style="font-size:0.74rem; color:var(--text-dim); display:flex; align-items:center; gap:8px;">
-          <span>💡 Tip: Click & drag with <strong>Arrow</strong> tool to define motion and camera sweep vectors.</span>
+        <div class="gp-legend-bar">
+          <span class="gp-legend-item"><span class="gp-dot" style="background:#ff1e42;"></span> <strong>Camera Moves:</strong> Red Arrows</span>
+          <span class="gp-legend-item"><span class="gp-dot" style="background:#ffe600;"></span> <strong>Perspective:</strong> Yellow Lines</span>
+          <span class="gp-legend-item"><span class="gp-dot" style="background:#00e5ff;"></span> <strong>Orientation:</strong> Blue = Forward / Orange = Backward</span>
+          <span class="gp-legend-item"><span class="gp-dot" style="background:#00ff66;"></span> <strong>Element Moves:</strong> Green Arrows (<em>No arrow = stationary</em>)</span>
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-secondary" id="cancel-grease-pen-btn">Cancel</button>
@@ -2237,6 +2285,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.2.0"></script>
+  <script src="app.js?v=2.6.0"></script>
 </body>
 </html>

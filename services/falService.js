@@ -558,6 +558,7 @@ CRITICAL PRESERVATION MANDATE:
   async generateVideo({
     imagePath,
     tailImagePath = null,
+    referenceImagePaths = [],
     prompt,
     cameraMotion = 'Dolly Forward',
     duration = 5,
@@ -616,10 +617,25 @@ CRITICAL PRESERVATION MANDATE:
 
     let payload;
     if (isSeedance && endpoint.includes('reference-to-video')) {
-      const promptWithRef = finalPrompt.includes('@Image1') ? finalPrompt : `@Image1: ${finalPrompt}`;
+      let promptWithRef = finalPrompt.includes('@Image1') ? finalPrompt : `@Image1 (Start Frame): ${finalPrompt}`;
       const imageUrls = [imageDataUri];
       if (tailDataUri) {
         imageUrls.push(tailDataUri);
+        if (!promptWithRef.includes('@Image2')) {
+          promptWithRef += ` @Image2 (End Frame)`;
+        }
+      }
+      if (Array.isArray(referenceImagePaths)) {
+        referenceImagePaths.forEach((rPath, idx) => {
+          if (imageUrls.length < 4 && rPath && fs.existsSync(rPath)) {
+            const rB64 = fs.readFileSync(rPath).toString('base64');
+            const rExt = path.extname(rPath).toLowerCase();
+            const rMime = rExt === '.png' ? 'image/png' : 'image/jpeg';
+            imageUrls.push(`data:${rMime};base64,${rB64}`);
+            const imgTag = `@Image${imageUrls.length}`;
+            promptWithRef += ` ${imgTag} (Consistent Asset Reference)`;
+          }
+        });
       }
       payload = {
         prompt: `${promptWithRef}. Dynamic camera movement: ${cameraMotion}. ${cadenceInstruction}`,

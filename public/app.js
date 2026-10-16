@@ -1212,6 +1212,16 @@ class StudioApp {
         this.userVideoDescInput.value = 'A fleet of 3 pirate raiding vessels hold in orbit over the small moon Frontiers Reach as they drop rickety improvised landing craft made of heat shields with some thrusters and seats attached to them. The camera chasing the landing craft as they descend through the atmosphere through a storm of flak fire.';
       }
 
+      // Populate High Level Context on UI initialization
+      const hlc = (this.project.highLevelContext || this.project.ingestedVideo?.highLevelContext || this.project.ingestedVideo?.analysisSummary || '').trim();
+      if (this.highLevelContextInput && hlc) {
+        this.highLevelContextInput.value = hlc;
+        if (this.hlcStatusBadge) {
+          this.hlcStatusBadge.className = 'hlc-badge badge-ready';
+          this.hlcStatusBadge.textContent = 'Derived & Active';
+        }
+      }
+
       // Ensure visualReference structure
       this.project.visualReference = this.project.visualReference || {};
       this.project.visualReference.styleBible = this.project.visualReference.styleBible || {
@@ -2501,7 +2511,10 @@ class StudioApp {
           <div class="continuity-section-item">
             <div class="continuity-header">
               <span class="continuity-title">🏷️ Consistent Assets</span>
-              <button class="btn-link-xs" data-action="assign-refs" title="Tag Characters, Props, and Places for consistency">Assign</button>
+              <div style="display:flex; gap:6px;">
+                <button class="btn-link-xs" data-action="auto-assign-refs" data-shot-id="${shot.id}" title="Auto-detect matching Characters, Props, and Places for this shot" style="color:var(--accent-cyan); font-weight:700;">⚡ Auto</button>
+                <button class="btn-link-xs" data-action="assign-refs" title="Tag Characters, Props, and Places for consistency">Assign</button>
+              </div>
             </div>
             <div class="shot-ref-chips-container" id="shot-ref-chips-${shot.id}">
               ${this.renderShotReferenceChips(shot)}
@@ -2536,6 +2549,14 @@ class StudioApp {
 
       // Wire @mention autocomplete dropdown
       this.setupMentionAutocomplete(descInput, shot);
+
+      // Wire auto-assign reference button
+      card.querySelectorAll('[data-action="auto-assign-refs"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.autoDetectShotReferences(shot);
+        });
+      });
 
       // Wire unassign reference buttons
       card.querySelectorAll('.btn-unassign-ref').forEach(btn => {
@@ -6252,6 +6273,11 @@ class StudioApp {
     this.btnLayerModeMove = document.getElementById('btn-layer-mode-move');
     this.chkLayerShowGhost = document.getElementById('chk-layer-show-ghost');
     this.chkLayerShowGrid = document.getElementById('chk-layer-show-grid');
+    this.chkLayerShowMarkup = document.getElementById('chk-layer-show-markup');
+    this.chkUseMarkupGuidance = document.getElementById('chk-use-markup-guidance');
+    this.btnAlignMarkupAngle = document.getElementById('btn-align-markup-angle');
+    this.markupGuidanceStatus = document.getElementById('markup-guidance-status');
+    this.studioMarkupImage = null;
 
     // Studio state
     this.activeStudioShot = null;
@@ -6394,6 +6420,8 @@ class StudioApp {
 
     this.chkLayerShowGhost?.addEventListener('change', () => this.renderCompositeCanvas());
     this.chkLayerShowGrid?.addEventListener('change', () => this.renderInteractionCanvas());
+    this.chkLayerShowMarkup?.addEventListener('change', () => this.renderCompositeCanvas());
+    this.btnAlignMarkupAngle?.addEventListener('click', () => this.alignLayerAngleToMarkup());
 
     if (this.layerInteractionCanvas) {
       this.layerInteractionCanvas.addEventListener('mousedown', (e) => this.handleCanvasMouseDown(e));
@@ -6430,6 +6458,19 @@ class StudioApp {
       };
     } else {
       this.studioGhostImage = null;
+    }
+
+    const markupUrl = isEndStudio ? (shot.endMarkupUrl || shot.endFlattenedMarkupUrl) : (shot.startMarkupUrl || shot.startFlattenedMarkupUrl);
+    if (markupUrl) {
+      const markupImg = new Image();
+      markupImg.crossOrigin = 'anonymous';
+      markupImg.src = markupUrl;
+      markupImg.onload = () => {
+        this.studioMarkupImage = markupImg;
+        this.renderCompositeCanvas();
+      };
+    } else {
+      this.studioMarkupImage = null;
     }
 
     this.layeredRestyleModal?.classList.remove('hidden');
@@ -6744,6 +6785,29 @@ class StudioApp {
     }
 
     // Populate Consistent Asset switcher dropdown
+    // Update Previs Markup Guidance status
+    const isEndTarget = this.activeStudioTargetFrame === 'end';
+    const hasPrevisMarkup = !!(isEndTarget 
+      ? (this.activeStudioShot?.endMarkupUrl || this.activeStudioShot?.endFlattenedMarkupUrl) 
+      : (this.activeStudioShot?.startMarkupUrl || this.activeStudioShot?.startFlattenedMarkupUrl));
+    
+    if (this.markupGuidanceStatus) {
+      if (hasPrevisMarkup) {
+        this.markupGuidanceStatus.innerHTML = `🧭 Previs Markup detected: <span style="color:#ffe600; font-weight:600;">Yellow perspective &amp; Blue (Forward) / Orange (Backward) ready</span>`;
+        if (this.chkUseMarkupGuidance) {
+          this.chkUseMarkupGuidance.disabled = false;
+        }
+        if (this.btnAlignMarkupAngle) this.btnAlignMarkupAngle.disabled = false;
+      } else {
+        this.markupGuidanceStatus.innerHTML = `⚠️ No Previs Markup on this frame (draw lines in Grease Pen)`;
+        if (this.chkUseMarkupGuidance) {
+          this.chkUseMarkupGuidance.checked = false;
+          this.chkUseMarkupGuidance.disabled = true;
+        }
+        if (this.btnAlignMarkupAngle) this.btnAlignMarkupAngle.disabled = true;
+      }
+    }
+
     if (this.selLayerAssignedAsset) {
       const allRefs = [];
       if (this.project.references) {
@@ -7121,6 +7185,13 @@ class StudioApp {
       ctx.drawImage(this.studioGhostImage, 0, 0, w, h);
       ctx.restore();
     }
+
+    if (this.chkLayerShowMarkup?.checked && this.studioMarkupImage) {
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(this.studioMarkupImage, 0, 0, w, h);
+      ctx.restore();
+    }
   }
 
   drawSubdividedQuad(ctx, img, quad, div = 4) {
@@ -7487,6 +7558,57 @@ class StudioApp {
     this.saveProject();
   }
 
+  async alignLayerAngleToMarkup() {
+    const layer = this.studioLayers.find(l => l.id === this.selectedLayerId);
+    if (!layer || !this.activeStudioShot) return;
+
+    if (this.btnAlignMarkupAngle) {
+      this.btnAlignMarkupAngle.disabled = true;
+      this.btnAlignMarkupAngle.innerHTML = `<span class="btn-spinner"></span> Aligning...`;
+    }
+
+    try {
+      const res = await fetch(`/api/storyboard/${this.activeStudioShot.id}/layers/${layer.id}/derive-markup-orientation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetFrame: this.activeStudioTargetFrame || 'start'
+        })
+      });
+      const data = await res.json();
+      if (!data.success || !data.orientation) {
+        throw new Error(data.error || 'Failed to derive orientation from markup');
+      }
+
+      const o = data.orientation;
+      if (this.selLayerOrientation && o.presetAngle) {
+        for (let i = 0; i < this.selLayerOrientation.options.length; i++) {
+          const opt = this.selLayerOrientation.options[i];
+          if (opt.text.toLowerCase().includes(o.presetAngle.toLowerCase()) || 
+              opt.value.toLowerCase().includes(o.presetAngle.toLowerCase())) {
+            this.selLayerOrientation.selectedIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (this.txtLayerOrientationExtra && o.orientationPrompt) {
+        this.txtLayerOrientationExtra.value = o.orientationPrompt;
+      }
+
+      if (this.markupGuidanceStatus) {
+        this.markupGuidanceStatus.innerHTML = `✅ Aligned to Previs: <span style="color:#ffe600; font-weight:600;">${o.presetAngle || 'Perspective Decoded'}</span>`;
+      }
+    } catch (err) {
+      alert('Previs Alignment Notice: ' + err.message);
+    } finally {
+      if (this.btnAlignMarkupAngle) {
+        this.btnAlignMarkupAngle.disabled = false;
+        this.btnAlignMarkupAngle.innerHTML = `⚡ Align Now`;
+      }
+    }
+  }
+
   async regenerateSelectedLayerAsset() {
     const layer = this.studioLayers.find(l => l.id === this.selectedLayerId);
     if (!layer || !this.activeStudioShot) return;
@@ -7500,11 +7622,16 @@ class StudioApp {
       const basePrompt = this.selLayerOrientation?.value || '';
       const extraPrompt = this.txtLayerOrientationExtra?.value?.trim() || '';
       const userPrompt = extraPrompt ? `${basePrompt}, ${extraPrompt}` : basePrompt;
+      const useMarkupGuidance = !!this.chkUseMarkupGuidance?.checked;
 
       const res = await fetch(`/api/storyboard/${this.activeStudioShot.id}/layers/${layer.id}/regenerate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userPrompt })
+        body: JSON.stringify({
+          userPrompt,
+          useMarkupGuidance,
+          targetFrame: this.activeStudioTargetFrame || 'start'
+        })
       });
       const data = await res.json();
       if (!data.success || !data.layer) throw new Error(data.error || 'Failed to regenerate asset');
@@ -7954,8 +8081,8 @@ class StudioApp {
     this.gpBtnUndo = document.getElementById('gp-btn-undo');
     this.gpBtnClear = document.getElementById('gp-btn-clear');
 
-    this.gpActiveTool = 'pen';
-    this.gpActiveColor = '#ff0055';
+    this.gpActiveTool = 'arrow';
+    this.gpActiveColor = '#00ff66';
     this.gpActiveSize = 6;
     this.gpIsDrawing = false;
     this.gpStartX = 0;
@@ -7983,12 +8110,15 @@ class StudioApp {
       }
     });
 
-    // Tool selectors
+    // Tool selectors (Enforces color-coded directing workflow)
     document.querySelectorAll('.btn-gp-tool').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.btn-gp-tool').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this.gpActiveTool = btn.dataset.tool || 'pen';
+        this.gpActiveTool = btn.dataset.tool || 'arrow';
+        if (btn.dataset.color) {
+          this.gpActiveColor = btn.dataset.color;
+        }
       });
     });
 
@@ -8070,11 +8200,17 @@ class StudioApp {
           ctx.arc(coords.x, coords.y, this.gpActiveSize * 2, 0, Math.PI * 2);
           ctx.fill();
         } else if (this.gpActiveTool === 'arrow') {
-          // Restore snapshot before drawing live preview arrow
-          if (this.gpSnapshotBeforeStroke) {
-            ctx.putImageData(this.gpSnapshotBeforeStroke, 0, 0);
-          }
+          if (this.gpSnapshotBeforeStroke) ctx.putImageData(this.gpSnapshotBeforeStroke, 0, 0);
           this.gpDrawArrow(ctx, this.gpStartX, this.gpStartY, coords.x, coords.y, this.gpActiveColor, this.gpActiveSize);
+        } else if (this.gpActiveTool === 'curved-arrow') {
+          if (this.gpSnapshotBeforeStroke) ctx.putImageData(this.gpSnapshotBeforeStroke, 0, 0);
+          this.gpDrawCurvedArrow(ctx, this.gpStartX, this.gpStartY, coords.x, coords.y, this.gpActiveColor, this.gpActiveSize);
+        } else if (this.gpActiveTool === 'line') {
+          if (this.gpSnapshotBeforeStroke) ctx.putImageData(this.gpSnapshotBeforeStroke, 0, 0);
+          this.gpDrawLine(ctx, this.gpStartX, this.gpStartY, coords.x, coords.y, this.gpActiveColor, this.gpActiveSize);
+        } else if (this.gpActiveTool === 'orientation') {
+          if (this.gpSnapshotBeforeStroke) ctx.putImageData(this.gpSnapshotBeforeStroke, 0, 0);
+          this.gpDrawOrientation(ctx, this.gpStartX, this.gpStartY, coords.x, coords.y, this.gpActiveColor, this.gpActiveSize);
         }
       };
 
@@ -8121,6 +8257,92 @@ class StudioApp {
     ctx.moveTo(toX, toY);
     ctx.lineTo(toX - headLength * Math.cos(angle - Math.PI / 6), toY - headLength * Math.sin(angle - Math.PI / 6));
     ctx.lineTo(toX - headLength * Math.cos(angle + Math.PI / 6), toY - headLength * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  gpDrawCurvedArrow(ctx, fromX, fromY, toX, toY, color, width) {
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 5) return;
+
+    const midX = (fromX + toX) / 2;
+    const midY = (fromY + toY) / 2;
+    // Compute graceful perpendicular arc offset (22% of line length)
+    const perpX = -dy / dist * (dist * 0.22);
+    const perpY = dx / dist * (dist * 0.22);
+    const ctrlX = midX + perpX;
+    const ctrlY = midY + perpY;
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.quadraticCurveTo(ctrlX, ctrlY, toX, toY);
+    ctx.stroke();
+
+    // Arrowhead angle aligned with end tangent of quadratic bezier curve
+    const tangentAngle = Math.atan2(toY - ctrlY, toX - ctrlX);
+    const headLength = Math.max(16, width * 3.5);
+
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - headLength * Math.cos(tangentAngle - Math.PI / 6), toY - headLength * Math.sin(tangentAngle - Math.PI / 6));
+    ctx.lineTo(toX - headLength * Math.cos(tangentAngle + Math.PI / 6), toY - headLength * Math.sin(tangentAngle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  gpDrawLine(ctx, fromX, fromY, toX, toY, color, width) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  gpDrawOrientation(ctx, fromX, fromY, toX, toY, color, width) {
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const angle = Math.atan2(dy, dx);
+    const headLength = Math.max(14, width * 3);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Base position anchor circle where element sits
+    ctx.beginPath();
+    ctx.arc(fromX, fromY, Math.max(5, width * 1.3), 0, Math.PI * 2);
+    ctx.fill();
+
+    // Facing shaft
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+
+    // Directional orientation chevron
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - headLength * Math.cos(angle - Math.PI / 5), toY - headLength * Math.sin(angle - Math.PI / 5));
+    ctx.lineTo(toX - (headLength * 0.6) * Math.cos(angle), toY - (headLength * 0.6) * Math.sin(angle));
+    ctx.lineTo(toX - headLength * Math.cos(angle + Math.PI / 5), toY - headLength * Math.sin(angle + Math.PI / 5));
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -8296,6 +8518,45 @@ class StudioApp {
       btn.disabled = false;
       btn.innerHTML = origHtml;
     }
+  }
+
+  autoDetectShotReferences(shot) {
+    const allRefs = this.getAllProjectReferences();
+    if (!allRefs || allRefs.length === 0) {
+      alert('No Consistent Assets found in your References library.');
+      return;
+    }
+    const text = `${shot.title || ''} ${shot.description || ''} ${JSON.stringify(shot.spatialContinuity || {})}`.toLowerCase();
+    const matched = allRefs.filter(ref => {
+      const name = (ref.name || '').toLowerCase();
+      const tag = (ref.tag || '').toLowerCase().replace('@', '').replace(/_/g, ' ');
+      const desc = (ref.description || '').toLowerCase();
+      if (name && text.includes(name)) return true;
+      if (tag && text.includes(tag)) return true;
+      if (ref.category === 'props') {
+        if ((name.includes('raiding vessel') || desc.includes('raiding vessel') || desc.includes('warship')) && (text.includes('raiding') || text.includes('vessel') || text.includes('fleet') || text.includes('pirate'))) return true;
+        if ((name.includes('landing craft') || desc.includes('landing craft')) && (text.includes('landing craft') || text.includes('craft') || text.includes('heat shield'))) return true;
+        if ((name.includes('frigate') || desc.includes('frigate')) && text.includes('frigate')) return true;
+      }
+      if (ref.category === 'places') {
+        if (text.includes('orbit') && (name.includes('orbit') || desc.includes('orbit'))) return true;
+        if (text.includes('surface') && (name.includes('surface') || desc.includes('surface'))) return true;
+        if ((text.includes('atmosphere') || text.includes('altitude') || text.includes('clouds')) && (name.includes('altitude') || desc.includes('altitude'))) return true;
+      }
+      return false;
+    });
+
+    if (matched.length === 0) {
+      alert(`No matching references detected for Shot #${shot.shotNumber || 1}. You can assign references manually via 'Assign'.`);
+      return;
+    }
+
+    const currentSet = new Set(shot.assignedReferences || []);
+    matched.forEach(m => currentSet.add(m.id));
+    shot.assignedReferences = Array.from(currentSet);
+    this.saveProject();
+    this.renderStoryboard();
+    alert(`⚡ Auto-detected and linked ${matched.length} Consistent Asset(s) to Shot #${shot.shotNumber || 1}: ${matched.map(m => m.name).join(', ')}`);
   }
 
 }

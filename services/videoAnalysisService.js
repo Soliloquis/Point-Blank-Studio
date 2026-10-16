@@ -1384,17 +1384,18 @@ Shot Number: #${shotNumber}
 Duration: ${Number(duration).toFixed(1)} seconds
 
 INSTRUCTIONS:
-1. Compare Frame 1 (Start of Shot) directly against Frame 2 (End of Shot) within the overarching sequence high-level context.
-2. Compute the exact physical motion vector: How did the focal subject move, rotate, scale, or accelerate?
-3. Compute the exact camera trajectory: Did the camera dolly forward, pan, crane down, orbit, tilt, or lock?
-4. Formulate an evocative action description (1-2 sentences) capturing what occurs from Start to End and how it advances the scene described in the high-level context.
-5. Provide strict spatial continuity directives.
+1. Contextualize this shot within the SEQUENCE HIGH-LEVEL CONTEXT: Identify how this specific shot advances the sequence narrative arc.
+2. Compare Frame 1 (Start of Shot) directly against Frame 2 (End of Shot) to compute the exact physical motion vector, subject displacement, and camera trajectory.
+3. Formulate a tight visual action description (1-2 sentences) focusing on movement, choreography, and trajectory bridging Frame 1 to Frame 2. Do not add color/palette metadata.
+4. Provide strict, nuanced spatial continuity directives (Rule of 180°, eyeline vectors, screen direction, subject position, camera angle, lighting origin).
+5. Identify any key subjects/vehicles/locations in this shot that correspond to sequence assets.
 
 Respond with strictly valid JSON matching this schema:
 {
   "title": "Short evocative shot title",
   "description": "Precise visual action description of what occurs from Frame 1 to Frame 2...",
   "cameraMotion": "Dolly Forward",
+  "matchedAssetKeywords": ["Raiding Vessel", "Landing Craft", "Low Orbit"],
   "spatialContinuity": {
     "motionVector": "Subject translation and speed from start to end",
     "cameraTrajectory": "Trajectory and lens perspective shift",
@@ -1503,7 +1504,6 @@ async function enhancePromptWithSpatialMarkup({
   startMarkupPath = null,
   endMarkupPath = null,
   currentDescription = '',
-  highLevelContext = '',
   cameraMotion = 'Dolly Forward',
   shotNumber = 1,
   falApiKey = '',
@@ -1532,34 +1532,51 @@ async function enhancePromptWithSpatialMarkup({
     throw new Error('No valid start or end frame images provided for markup analysis');
   }
 
-  const prompt = `You are an expert Virtual Production Supervisor, Director, and VFX Cinematographer analyzing director draw-overs and grease pen annotations on 3D spatial previz frames for an action sequence.
+  const prompt = `You are an expert Hollywood action director, camera tracker, and VFX cinematographer decoding spatial previz director draw-overs.
 
 Images provided:
-1. Frame 1 (Start Frame): 3D spatial blocking showing initial positions and layout. Any brightly colored grease pen annotations (arrows, circles, lines, callouts) represent the director's instructions for motion trajectories, velocity, entry angles, or focal emphasis.
-2. Frame 2 (End Frame): 3D spatial blocking showing concluding positions and layout with any ending director annotations.
+1. Frame 1 (Start Frame): 3D spatial blocking showing initial positions.
+2. Frame 2 (End Frame): 3D spatial blocking showing concluding positions and final framing.
 
-SEQUENCE HIGH-LEVEL CONTEXT (Ground Truth):
-"${(highLevelContext || currentDescription || '').trim() || 'Cinematic sequence'}"
-
-EXISTING SHOT DESCRIPTION:
+EXISTING SHOT ACTION (Baseline narrative to enhance, DO NOT discard):
 "${(currentDescription || '').trim() || 'Dynamic action progression'}"
 
 CAMERA MOTION SETTING:
 "${cameraMotion || 'Dolly Forward'}"
 
-TASK:
-Interpret the director's grease pen markings together with the 3D geometry progression between Frame 1 and Frame 2:
-- Directional arrows indicate flight paths, trajectory arcs, camera dolly/pan tracks, or weapon fire vectors.
-- Circles / boxes highlight key focal elements, points of impact, or clearance margins.
-- Lines show speed trails or relative movement against the background.
+DIRECTOR COLOR-CODED MARKUP RULES (STRICT VISUAL GRAMMAR):
+1. BRIGHT RED ARROWS (Straight & Curved):
+   - Indicate CAMERA MOVES ONLY (e.g. dolly in/out, truck left/right, pan, tilt, crane, or curved orbital sweep).
+   - Red markings must NEVER be interpreted as vehicle or character movement.
+2. BRIGHT YELLOW STRAIGHT LINES:
+   - Indicate PERSPECTIVE LINES and VANISHING POINT.
+   - Use these to understand the shot's optical depth, convergence, and lens perspective.
+3. BRIGHT BLUE AND ORANGE INDICATORS:
+   - Indicate ELEMENT ORIENTATION (Facing direction in 3D space).
+   - BRIGHT BLUE indicates the FORWARD / BOW / NOSE / HEADING (the direction the subject is facing).
+   - BRIGHT ORANGE indicates the BACKWARD / AFT / STERN / TAIL (the rear / exhaust direction).
+   - The vector from Orange (rear) to Blue (front) defines the subject's exact forward facing axis.
+4. BRIGHT GREEN ARROWS (Straight & Curved):
+   - Indicate ELEMENT MOVES (the exact direction of travel, flight path, and velocity of vehicles or characters).
+   - MANDATORY STATIONARY RULE: If an element, vehicle, or subject has NO green arrow pointing from or over it, it MUST be assumed completely stationary!
 
-Synthesize the existing shot description, the director's visual markup directives, and the overarching sequence context into a single, unified, punchy, and cinematic prompt. The prompt must describe the dynamic physical action, subject movement, velocity, and camera movement clearly so a video generation model can execute the shot with authentic choreography.
+CRITICAL MANDATORY RULES:
+1. STRICTLY PHYSICAL ACTION & MOVEMENT ONLY:
+   - Describe ONLY the dynamic physical movement, velocity, flight paths, acceleration, physical choreography, and camera movement between Frame 1 and Frame 2.
+   - ABSOLUTELY NO COLOR, PALETTE, LIGHTING, OR ARTISTIC MEDIUM DATA: Do NOT describe colors (e.g. no "orange", "blue", "metallic gray", "sunset", "glowing hues"), lighting styles, shaders, or rendering medium. All color and visual appearance are strictly defined by the visual keyframes.
+
+2. BRIDGE FRAME 1 TO FRAME 2:
+   - You MUST account for both frames. Explicitly detail how subjects move from their Frame 1 positions and arrive at their Frame 2 positions and final framing. Do NOT ignore Frame 2.
+
+3. ENHANCE THE BASELINE NARRATIVE:
+   - Do NOT replace the existing shot action. Enhance and sharpen it using the color-coded director markings above.
+   - Produce 2-3 concise, punchy sentences detailing the exact choreography.
 
 Respond with strictly valid JSON matching this schema:
 {
-  "description": "Unified enhanced action prompt incorporating the director's markup vectors and spatial choreography...",
-  "cameraMotion": "Dolly Forward",
-  "markupInterpretation": "Brief summary of what the grease pen marks indicated"
+  "description": "2-3 concise, punchy sentences describing strictly the physical action, velocity, trajectory, and camera movement connecting Frame 1 to Frame 2...",
+  "cameraMotion": "${cameraMotion || 'Dolly Forward'}",
+  "markupInterpretation": "Summary of decoded color-coded marks: Red=Camera, Green=Element Moves (stationary if none), Blue=Facing, Yellow=Perspective"
 }`;
 
   if (falApiKey && falApiKey.trim()) {
@@ -1583,25 +1600,21 @@ Respond with strictly valid JSON matching this schema:
         { type: 'text', text: prompt }
       ];
       for (const img of images) {
-        content.push({ type: 'text', text: `[${img.label}]:` });
         content.push({
           type: 'image_url',
-          image_url: { url: img.dataUri, detail: 'high' }
+          image_url: { url: img.dataUri }
         });
       }
-      const payload = {
+      const client = new OpenAI({ apiKey: openaiApiKey.trim() });
+      const response = await client.chat.completions.create({
         model: 'gpt-4o',
         messages: [{ role: 'user', content }],
+        max_tokens: 500,
+        temperature: 0.2,
         response_format: { type: 'json_object' }
-      };
-      const response = await requestJson('https://api.openai.com/v1/chat/completions', {
-        'Authorization': `Bearer ${openaiApiKey.trim()}`
-      }, payload);
-      const raw = response.choices?.[0]?.message?.content;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.description) return parsed;
-      }
+      });
+      const parsed = JSON.parse(response.choices[0].message.content);
+      if (parsed && parsed.description) return parsed;
     } catch (e) {
       console.warn('[VideoAnalysis] OpenAI vision markup enhancement failed:', e.message);
     }
@@ -1611,11 +1624,8 @@ Respond with strictly valid JSON matching this schema:
     try {
       const parts = [{ text: prompt }];
       for (const img of images) {
-        const b64 = img.dataUri.split(',')[1];
-        parts.push({ text: `[${img.label}]:` });
-        parts.push({
-          inline_data: { mime_type: 'image/jpeg', data: b64 }
-        });
+        const m = img.dataUri.match(/^data:([^;]+);base64,(.+)$/);
+        if (m) parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
       }
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.trim()}`;
       const response = await requestJson(endpoint, {}, { contents: [{ parts }] });
@@ -1632,11 +1642,204 @@ Respond with strictly valid JSON matching this schema:
 
   // Fallback heuristic synthesis
   const baseDesc = currentDescription.trim() || 'Dynamic action progression';
-  const enhancedFallback = `${baseDesc} Tracking along the director's spatial vector, moving dynamically with ${cameraMotion.toLowerCase()} framing as velocity accelerates through the designated trajectory.`;
+  const enhancedFallback = `${baseDesc} Tracking smoothly along the director's spatial trajectory, accelerating toward the Frame 2 layout with ${cameraMotion.toLowerCase()} framing.`;
   return {
     description: enhancedFallback,
     cameraMotion: cameraMotion || 'Dolly Forward',
     markupInterpretation: 'Heuristic alignment with spatial motion vector.'
+  };
+}
+
+/**
+ * Analyzes Spatial Previs Markup (Yellow perspective lines & Blue/Orange orientation pointers)
+ * specifically relative to an asset layer's position and bounding quad, to determine its exact
+ * 3D camera angle, perspective, pitch, roll, and yaw for consistent asset generation in the Compositor.
+ */
+async function deriveLayerOrientationFromMarkup({
+  markupPath = null,
+  flattenedMarkupPath = null,
+  layer = {},
+  asset = {},
+  falApiKey = '',
+  openaiApiKey = '',
+  geminiApiKey = ''
+}) {
+  const images = [];
+  const primaryPath = (flattenedMarkupPath && fs.existsSync(flattenedMarkupPath)) 
+    ? flattenedMarkupPath 
+    : (markupPath && fs.existsSync(markupPath) ? markupPath : null);
+
+  if (!primaryPath) {
+    throw new Error('No Spatial Previs Markup image available for orientation analysis');
+  }
+
+  const ext = path.extname(primaryPath).toLowerCase();
+  const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
+  images.push({
+    label: 'Keyframe with Director Previs Markup (Yellow=Perspective, Blue/Orange=Orientation)',
+    dataUri: `data:${mime};base64,${fileToBase64(primaryPath)}`
+  });
+
+  // If asset reference image exists, provide it for visual correspondence
+  if (asset?.imagePath && fs.existsSync(asset.imagePath)) {
+    const aExt = path.extname(asset.imagePath).toLowerCase();
+    const aMime = aExt === '.png' ? 'image/png' : 'image/jpeg';
+    images.push({
+      label: `Consistent Asset Reference: ${asset.name || 'Subject'}`,
+      dataUri: `data:${aMime};base64,${fileToBase64(asset.imagePath)}`
+    });
+  }
+
+  // Calculate layer center and quad geometry if available
+  let posContext = 'Center of frame';
+  let quadSkewDesc = '';
+  if (layer?.quad && Array.isArray(layer.quad) && layer.quad.length === 4) {
+    const [p0, p1, p2, p3] = layer.quad;
+    const cx = Math.round((p0.x + p1.x + p2.x + p3.x) / 4);
+    const cy = Math.round((p0.y + p1.y + p2.y + p3.y) / 4);
+    const w = Math.round(Math.max(p1.x, p2.x) - Math.min(p0.x, p3.x));
+    const h = Math.round(Math.max(p2.y, p3.y) - Math.min(p0.y, p1.y));
+    const horizDesc = cx < 640 ? 'screen-left' : cx > 1280 ? 'screen-right' : 'screen-center';
+    const vertDesc = cy < 360 ? 'upper' : cy > 720 ? 'lower' : 'middle';
+    posContext = `Positioned at approx (${cx}, ${cy}) [${vertDesc} ${horizDesc} quadrant], width ~${w}px, height ~${h}px`;
+    
+    // Check pin deformation for perspective tilt
+    const topWidth = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+    const botWidth = Math.hypot(p2.x - p3.x, p2.y - p3.y);
+    if (topWidth < botWidth * 0.8) {
+      quadSkewDesc = 'Quad foreshortening indicates receding away from camera (narrower top / depth tilt).';
+    } else if (botWidth < topWidth * 0.8) {
+      quadSkewDesc = 'Quad foreshortening indicates leaning toward camera.';
+    }
+  }
+
+  const assetName = asset?.name || layer?.assetName || 'Target Asset';
+
+  const prompt = `You are a professional Hollywood VFX Matchmove Director and 3D Previs Artist.
+
+MISSION:
+Derive the optimal 3D camera viewing angle, perspective, and orientation for the consistent asset "${assetName}" to generate it with 3D image generation.
+
+TARGET LAYER IN FRAME (1920x1080 canvas):
+- Subject: "${assetName}"
+- ${posContext}
+${quadSkewDesc ? `- Geometry Pin Cue: ${quadSkewDesc}` : ''}
+
+DIRECTOR'S PREVIS MARKUP GRAMMAR:
+1. BRIGHT YELLOW STRAIGHT LINES:
+   - PERSPECTIVE & VANISHING POINT: Optical convergence, planetary horizon slope, and depth plane.
+2. BRIGHT BLUE AND ORANGE INDICATORS:
+   - 🔵 BLUE POINTER = FORWARD / BOW / NOSE / HEADING of the subject.
+   - 🟠 ORANGE POINTER = BACKWARD / AFT / STERN / ENGINES / TAIL of the subject.
+
+CRITICAL CAMERA-RELATIVE VIEWPOINT DEDUCTION RULES (DO NOT INVERT CAMERA!):
+You are defining what the CAMERA sees when photographing this 3D subject:
+- Look at where BLUE (Forward) and ORANGE (Backward) point relative to the camera:
+  * If BLUE points INTO the scene / AWAY from the camera / toward the vanishing horizon (e.g. heading screen-left or screen-right into distance):
+    -> The subject is facing AWAY from the camera!
+    -> The camera is BEHIND the subject!
+    -> The camera sees the REAR / AFT / ENGINES / THRUSTERS of the subject facing the camera!
+    -> You MUST choose a REAR view preset:
+       - "Rear 3/4 Port to Aft View": If the bow is pointing screen-left away from camera, the camera views from behind along the PORT (left) side, with the rear thruster engines facing the camera.
+       - "Rear 3/4 Starboard to Aft View": If the bow is pointing screen-right away from camera, the camera views from behind along the STARBOARD (right) side, with the rear thruster engines facing the camera.
+       - "Rear 3/4 Thrusters View": Highlighting rear engines facing camera.
+    -> NEVER choose "Front 3/4 Bow View" when the ship is facing away from the camera with its engines facing the camera!
+  * If BLUE points OUT of the frame TOWARD the camera:
+    -> Only in this case does the camera see the front: "Front 3/4 Bow View".
+
+PRESET ANGLE CHOICES (MUST EXACTLY MATCH ONE OF THESE):
+- "Rear 3/4 Port to Aft View"
+- "Rear 3/4 Starboard to Aft View"
+- "Rear 3/4 Thrusters View"
+- "Front 3/4 Bow View"
+- "Side Profile Elevation"
+- "Top-Down Dorsal View"
+- "Dynamic 3/4 Perspective Angle"
+
+INSTRUCTIONS:
+1. Examine the yellow perspective lines and blue/orange orientation indicator(s) at or near the target asset's position (${posContext}).
+2. Determine whether the camera is viewing the subject from the FRONT (bow facing camera) or REAR (engines facing camera).
+3. If the ship's orange tail points toward camera and blue bow points into screen-left, select "Rear 3/4 Port to Aft View" with rear engines facing camera.
+4. Formulate an orientation prompt explicitly describing the camera viewpoint (e.g., "Rear 3/4 port perspective angle view, camera viewing from behind showing aft engines and thrusters facing the camera in the foreground, port hull receding forward toward the bow at screen-left aligned with yellow perspective lines...").
+
+Respond strictly with valid JSON matching this schema:
+{
+  "presetAngle": "Rear 3/4 Port to Aft View",
+  "orientationPrompt": "Rear 3/4 port perspective angle view, camera positioned behind the vessel with its rear thruster engines facing the camera, port hull flank receding forward toward screen-left aligned with yellow planetary perspective convergence lines",
+  "extraDetails": "Engines facing camera, viewing from behind along port hull, heading forward screen-left",
+  "rationale": "Blue forward arrow points screen-left into the distance, orange rear arrow points toward camera; camera is behind the vessel viewing its aft thrusters and port flank."
+}`;
+
+  // Call Fal Any-LLM Vision
+  if (falApiKey && falApiKey.trim()) {
+    try {
+      const falRes = await requestFalAnyLlmVision({
+        apiKey: falApiKey,
+        imageUrls: images.map(img => img.dataUri),
+        prompt
+      });
+      if (falRes && (falRes.orientationPrompt || falRes.presetAngle)) {
+        return falRes;
+      }
+    } catch (e) {
+      console.warn('[VideoAnalysis] Fal vision markup orientation derivation failed:', e.message);
+    }
+  }
+
+  // Call OpenAI Vision
+  if (openaiApiKey && openaiApiKey.trim()) {
+    try {
+      const content = [{ type: 'text', text: prompt }];
+      for (const img of images) {
+        content.push({ type: 'text', text: `[${img.label}]:` });
+        content.push({ type: 'image_url', image_url: { url: img.dataUri, detail: 'low' } });
+      }
+      const payload = {
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content }],
+        response_format: { type: 'json_object' }
+      };
+      const response = await requestJson('https://api.openai.com/v1/chat/completions', {
+        'Authorization': `Bearer ${openaiApiKey.trim()}`
+      }, payload);
+      const raw = response.choices?.[0]?.message?.content;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && (parsed.orientationPrompt || parsed.presetAngle)) return parsed;
+      }
+    } catch (e) {
+      console.warn('[VideoAnalysis] OpenAI vision markup orientation derivation failed:', e.message);
+    }
+  }
+
+  // Call Gemini Vision
+  if (geminiApiKey && geminiApiKey.trim()) {
+    try {
+      const parts = [{ text: prompt }];
+      for (const img of images) {
+        const b64 = img.dataUri.split(',')[1];
+        parts.push({ text: `[${img.label}]:` });
+        parts.push({ inline_data: { mime_type: 'image/jpeg', data: b64 } });
+      }
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.trim()}`;
+      const response = await requestJson(endpoint, {}, { contents: [{ parts }] });
+      const raw = response.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (raw) {
+        const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        if (parsed && (parsed.orientationPrompt || parsed.presetAngle)) return parsed;
+      }
+    } catch (e) {
+      console.warn('[VideoAnalysis] Gemini vision markup orientation derivation failed:', e.message);
+    }
+  }
+
+  // Smart heuristic fallback if AI vision is unavailable or rate-limited
+  return {
+    presetAngle: "Dynamic 3/4 Perspective Angle",
+    orientationPrompt: `Dynamic 3/4 perspective angle view of ${assetName}, bow facing forward along flight vector, aligned with scene perspective lines and 3D vanishing points`,
+    extraDetails: "Dynamic 3/4 perspective aligned with scene perspective convergence",
+    rationale: "Defaulted to dynamic 3/4 perspective matching scene optical axis."
   };
 }
 
@@ -1647,6 +1850,7 @@ module.exports = {
   generateStyleBrief,
   compileContinuityDirectives,
   analyzeShotMotionDelta,
-  enhancePromptWithSpatialMarkup
+  enhancePromptWithSpatialMarkup,
+  deriveLayerOrientationFromMarkup
 };
 

@@ -362,8 +362,22 @@ async function regenerateLayerAsset({ shotId, layer, asset, userPrompt, styleBib
   if (asset.hair) designTokens.push(`Features: ${asset.hair}`);
   if (asset.architecture) designTokens.push(`Structure: ${asset.architecture}`);
 
+  let cameraOrientationConstraint = '';
+  if (/rear|aft|thruster|engine|behind/i.test(viewDesc)) {
+    cameraOrientationConstraint = `
+Strict Camera Perspective Constraint (Rear/Aft View):
+- The camera is positioned strictly BEHIND the subject.
+- The rear stern, aft engine exhaust blocks, thruster nozzles, and aft superstructure MUST be in the immediate foreground facing directly toward the camera.
+- The vessel's hull must recede forward away from the camera into the distance.
+- ABSOLUTELY DO NOT render the front bow, nose, or cockpit facing the camera.`;
+  } else if (/front|bow|head-on|cockpit/i.test(viewDesc)) {
+    cameraOrientationConstraint = `
+Strict Camera Perspective Constraint (Front/Bow View):
+- The camera is positioned in front of the subject looking directly back at its front bow and cockpit.`;
+  }
+
   let prompt = `Subject: Canonical Consistent Asset "${asset.name}". ${designTokens.join('. ')}.
-Task: Generate a pristine 3D camera-rotated view: ${viewDesc}.
+Task: Generate a pristine 3D camera-rotated view: ${viewDesc}.${cameraOrientationConstraint}
 Strict Design Continuity:
 - Retain 100% identical geometry, structural proportions, hull plating, weapon turrets, communications bridge, and engine clusters from the reference image.
 - Retain exact color palette, paint patterns, stripes, decals, weathering, and material reflectivity.

@@ -191,9 +191,14 @@ class VideoGenerationService {
         }
       }
 
+      const referenceImagePaths = (assignedReferences || [])
+        .map(r => r.imagePath)
+        .filter(p => p && fs.existsSync(p));
+
       const res = await this.falService.generateVideo({
         imagePath: targetKf,
         tailImagePath: tailKeyframePath,
+        referenceImagePaths,
         prompt: videoPrompt,
         cameraMotion: cameraMotion || 'Dolly Forward',
         duration,

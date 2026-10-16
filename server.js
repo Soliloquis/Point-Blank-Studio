@@ -9,7 +9,7 @@ const { FalService } = require('./services/falService');
 const { VideoGenerationService } = require('./services/seedanceService');
 const { ElevenLabsService } = require('./services/elevenlabsService');
 const { stitchTimelineClips, getVideoDuration, extractLastFrame, extractSingleKeyframe } = require('./services/ffmpegService');
-const { analyzeAndDeconstructVideo, generateHighLevelContext, analyzeShotMotionDelta, generateImageToDescription, generateStyleBrief, compileContinuityDirectives, enhancePromptWithSpatialMarkup } = require('./services/videoAnalysisService');
+const { analyzeAndDeconstructVideo, generateHighLevelContext, analyzeShotMotionDelta, generateImageToDescription, generateStyleBrief, compileContinuityDirectives, enhancePromptWithSpatialMarkup, deriveLayerOrientationFromMarkup } = require('./services/videoAnalysisService');
 const { detectColorKeysInSpatialFrame } = require('./services/colorKeyService');
 const { extractShotLayers, regenerateLayerAsset, getCanonicalAssetSprite, bakeAndCommitComposite } = require('./services/layerCompositorService');
 
@@ -1385,6 +1385,28 @@ app.post('/api/storyboard/add-range', async (req, res) => {
       rule180Vector: 'East Axis Continuity'
     };
 
+    // Auto-match Consistent Assets (Characters, Props, Places)
+    const allRefs = getAllReferences(project);
+    const textToMatch = `${finalTitle} ${finalDesc} ${(motionDelta?.matchedAssetKeywords || []).join(' ')}`.toLowerCase();
+    const autoMatchedRefs = allRefs.filter(ref => {
+      const name = (ref.name || '').toLowerCase();
+      const tag = (ref.tag || '').toLowerCase().replace('@', '').replace(/_/g, ' ');
+      const desc = (ref.description || '').toLowerCase();
+      if (name && textToMatch.includes(name)) return true;
+      if (tag && textToMatch.includes(tag)) return true;
+      if (ref.category === 'props') {
+        if ((name.includes('raiding vessel') || desc.includes('raiding vessel') || desc.includes('warship')) && (textToMatch.includes('raiding') || textToMatch.includes('vessel') || textToMatch.includes('fleet') || textToMatch.includes('pirate'))) return true;
+        if ((name.includes('landing craft') || desc.includes('landing craft')) && (textToMatch.includes('landing craft') || textToMatch.includes('craft') || textToMatch.includes('heat shield'))) return true;
+        if ((name.includes('frigate') || desc.includes('frigate')) && textToMatch.includes('frigate')) return true;
+      }
+      if (ref.category === 'places') {
+        if (textToMatch.includes('orbit') && (name.includes('orbit') || desc.includes('orbit'))) return true;
+        if (textToMatch.includes('surface') && (name.includes('surface') || desc.includes('surface'))) return true;
+        if ((textToMatch.includes('atmosphere') || textToMatch.includes('altitude') || textToMatch.includes('clouds')) && (name.includes('altitude') || desc.includes('altitude'))) return true;
+      }
+      return false;
+    });
+
     const newShot = {
       id: `sb_range_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       shotNumber: shotNum,
@@ -1403,6 +1425,7 @@ app.post('/api/storyboard/add-range', async (req, res) => {
       description: finalDesc,
       cameraMotion: finalMotion,
       spatialContinuity: finalSpatial,
+      assignedReferences: autoMatchedRefs.map(r => r.id),
       status: 'pending',
       approved: false,
       generatedClip: null
@@ -1629,7 +1652,6 @@ app.post('/api/storyboard/:shotId/enhance-with-markup', async (req, res) => {
       startMarkupPath: shot.startFlattenedMarkupPath,
       endMarkupPath: shot.endFlattenedMarkupPath,
       currentDescription: desc,
-      highLevelContext,
       cameraMotion: motion,
       shotNumber: shot.shotNumber || 1,
       falApiKey: appConfig.falApiKey || process.env.FAL_KEY || '',
@@ -2085,6 +2107,15 @@ app.post('/api/storyboard/:shotId/restyle-keyframe', async (req, res) => {
 // LAYERED RESTYLE STUDIO API ROUTES
 // =========================================================================
 
+// Helper to locate a layer across start and end layer stacks
+function findShotLayer(shot, layerId) {
+  let layer = (shot.layers || []).find((l) => l.id === layerId);
+  if (layer) return { layer, list: shot.layers, isEnd: false };
+  layer = (shot.endLayers || []).find((l) => l.id === layerId);
+  if (layer) return { layer, list: shot.endLayers, isEnd: true };
+  return { layer: null, list: null, isEnd: false };
+}
+
 // 1. Decompose Shot into Transparent Layers with Clean Background
 app.post('/api/storyboard/:shotId/layers/extract', async (req, res) => {
   try {
@@ -2124,7 +2155,59 @@ app.post('/api/storyboard/:shotId/layers/extract', async (req, res) => {
   }
 });
 
-// 2. Regenerate an Individual Layer Asset
+// Derive 3D Perspective & Orientation for a Layer from Spatial Previs Markup
+app.post('/api/storyboard/:shotId/layers/:layerId/derive-markup-orientation', async (req, res) => {
+  try {
+    const { shotId, layerId } = req.params;
+    const { targetFrame = 'start' } = req.body || {};
+    const project = getProject();
+    const shot = (project.storyboard || []).find((s) => s.id === shotId);
+    if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+    const { layer, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
+    if (!layer) return res.status(404).json({ error: 'Layer not found' });
+
+    const allRefs = [];
+    if (project.references) {
+      if (Array.isArray(project.references)) {
+        allRefs.push(...project.references);
+      } else {
+        ['characters', 'props', 'places'].forEach(cat => {
+          if (Array.isArray(project.references[cat])) allRefs.push(...project.references[cat]);
+        });
+      }
+    }
+    if (Array.isArray(project.visualReference?.assets)) {
+      allRefs.push(...project.visualReference.assets);
+    }
+    const asset = allRefs.find((a) => a.id === layer.assetId) || { name: layer.assetName || 'Target Asset' };
+
+    const isTargetEnd = targetFrame === 'end' || isLayerEnd;
+    const flattenedMarkupPath = isTargetEnd ? shot.endFlattenedMarkupPath : shot.startFlattenedMarkupPath;
+    const rawMarkupPath = isTargetEnd ? shot.endMarkupPath : shot.startMarkupPath;
+
+    if (!((flattenedMarkupPath && fs.existsSync(flattenedMarkupPath)) || (rawMarkupPath && fs.existsSync(rawMarkupPath)))) {
+      return res.status(400).json({ error: 'No Spatial Previs Markup found on this frame' });
+    }
+
+    const orientation = await deriveLayerOrientationFromMarkup({
+      markupPath: rawMarkupPath,
+      flattenedMarkupPath: flattenedMarkupPath || rawMarkupPath,
+      layer,
+      asset,
+      falApiKey: appConfig.falApiKey || process.env.FAL_KEY || '',
+      openaiApiKey: appConfig.openaiApiKey || process.env.OPENAI_API_KEY || '',
+      geminiApiKey: appConfig.geminiApiKey || process.env.GEMINI_API_KEY || ''
+    });
+
+    res.json({ success: true, orientation });
+  } catch (err) {
+    console.error('[Derive Layer Orientation] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Regenerate an Individual Layer Asset (Optionally Guided by Spatial Previs Markup)
 app.post('/api/storyboard/:shotId/layers/:layerId/regenerate', async (req, res) => {
   try {
     const { shotId, layerId } = req.params;
@@ -2152,13 +2235,45 @@ app.post('/api/storyboard/:shotId/layers/:layerId/regenerate', async (req, res) 
     if (!asset) {
       return res.status(400).json({ error: `No consistent asset found for ID ${layer.assetId}` });
     }
-    const { userPrompt } = req.body || {};
+    const { userPrompt, useMarkupGuidance, targetFrame = 'start' } = req.body || {};
+
+    let effectiveUserPrompt = (userPrompt || '').trim();
+    let markupOrientation = null;
+
+    if (useMarkupGuidance) {
+      const isTargetEnd = targetFrame === 'end' || isLayerEnd;
+      const flattenedMarkupPath = isTargetEnd ? shot.endFlattenedMarkupPath : shot.startFlattenedMarkupPath;
+      const rawMarkupPath = isTargetEnd ? shot.endMarkupPath : shot.startMarkupPath;
+
+      if ((flattenedMarkupPath && fs.existsSync(flattenedMarkupPath)) || (rawMarkupPath && fs.existsSync(rawMarkupPath))) {
+        try {
+          markupOrientation = await deriveLayerOrientationFromMarkup({
+            markupPath: rawMarkupPath,
+            flattenedMarkupPath: flattenedMarkupPath || rawMarkupPath,
+            layer,
+            asset,
+            falApiKey: appConfig.falApiKey || process.env.FAL_KEY || '',
+            openaiApiKey: appConfig.openaiApiKey || process.env.OPENAI_API_KEY || '',
+            geminiApiKey: appConfig.geminiApiKey || process.env.GEMINI_API_KEY || ''
+          });
+
+          if (markupOrientation && markupOrientation.orientationPrompt) {
+            console.log(`[LayerRegen] Guided by Previs Markup: ${markupOrientation.orientationPrompt}`);
+            effectiveUserPrompt = effectiveUserPrompt 
+              ? `${markupOrientation.orientationPrompt}. ${effectiveUserPrompt}`
+              : markupOrientation.orientationPrompt;
+          }
+        } catch (orientErr) {
+          console.warn('[LayerRegen] Previs markup orientation derivation failed, using user prompt:', orientErr.message);
+        }
+      }
+    }
 
     const result = await regenerateLayerAsset({
       shotId,
       layer,
       asset,
-      userPrompt,
+      userPrompt: effectiveUserPrompt,
       styleBible: project.visualReference?.styleBible || null,
       model: req.body.model || appConfig.assetGenModel || 'openai/gpt-image-2.5/flare/edit',
       outputDir: KEYFRAMES_DIR,
@@ -2169,7 +2284,7 @@ app.post('/api/storyboard/:shotId/layers/:layerId/regenerate', async (req, res) 
     layer.imagePath = result.imagePath;
     saveProject(project);
 
-    res.json({ success: true, layer });
+    res.json({ success: true, layer, markupOrientation });
   } catch (err) {
     console.error('Layer regeneration error:', err);
     res.status(500).json({ error: err.message });
