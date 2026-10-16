@@ -3346,9 +3346,9 @@ input[type="range"].vertical-range-slider.master-fader {
 }
 
 .nle-clip-v1.active {
-  border-color: #38bdf8;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.5);
-  z-index: 5;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 2px #38bdf8, 0 0 16px rgba(56, 189, 248, 0.7) !important;
+  z-index: 10;
 }
 
 .nle-clip-filmstrip-thumb {
@@ -3434,6 +3434,12 @@ input[type="range"].vertical-range-slider.master-fader {
   padding: 3px 6px;
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.nle-clip-a1.active {
+  border-color: #34d399 !important;
+  box-shadow: 0 0 0 2px #34d399, 0 0 16px rgba(52, 211, 153, 0.7) !important;
+  z-index: 10;
 }
 
 .nle-audio-waveform-bars {
@@ -6781,9 +6787,9 @@ body.nle-resizing canvas {
   flex-shrink: 0;
 }
 .nle-clip-v2.active {
-  border-color: #c084fc;
-  box-shadow: 0 0 16px rgba(192, 132, 252, 0.6);
-  z-index: 5;
+  border-color: #c084fc !important;
+  box-shadow: 0 0 0 2px #c084fc, 0 0 16px rgba(192, 132, 252, 0.7) !important;
+  z-index: 10;
 }
 
 .nle-clip-a2 {
@@ -6802,9 +6808,9 @@ body.nle-resizing canvas {
   flex-shrink: 0;
 }
 .nle-clip-a2.active {
-  border-color: #fbbf24;
-  box-shadow: 0 0 16px rgba(251, 191, 36, 0.6);
-  z-index: 5;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 0 2px #fbbf24, 0 0 16px rgba(251, 191, 36, 0.7) !important;
+  z-index: 10;
 }
 
 .nle-clip-image {
