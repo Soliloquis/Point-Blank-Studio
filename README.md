@@ -52,10 +52,31 @@ Point Blank Studio is organized into an intuitive four-stage linear production p
   - Ensures generated video clips begin precisely on the Start keyframe and conclude seamlessly on the End keyframe.
 
 ### 4. 🎞️ Timeline Assembly Workspace
-- **Non-Destructive Editing**: Sequentially assemble generated takes directly from the storyboard into a master timeline track. Trimming in-points and out-points preserves original source media.
-- **Cinema Player**: Full-featured transport controls, scrubber playhead, speed toggles, and synchronized timecode readouts.
-- **Audio Stem Management**: Add dialogue, sound effects, and score tracks per shot with integrated volume sliders, mute controls, and multi-band equalizer presets.
-- **Master Video Export (FFmpeg)**: Conforms resolutions (1080p, 720p, or 9:16 vertical), normalizes frame rates and audio, and renders a unified master MP4 file.
+- **Non-Destructive Multi-Track Editing**: Sequentially assemble generated takes directly from the storyboard across multiple dedicated tracks:
+  - **V1 (Base Video)**: Primary cinematic sequence track with non-destructive in/out trimming.
+  - **V2 (Overlay Video / B-Roll)**: Supplemental visual takes, reaction shots, and picture-in-picture layers.
+  - **A1 (Dialogue & Voiceover)**: Synchronized speech and ADR audio stems.
+  - **A2 (Music & Foley SFX)**: Soundtrack beds and kinetic impact sound effects.
+- **✂️ Directing Cut-Point Transitions & Inline Seam Badges**:
+  - **Inline Seam Badges**: Sleek interactive pills positioned directly on edit boundaries between clips on Track V1 without altering timeline flex-spacing or audio sync.
+  - **Directing Rhythm Styles**:
+    - `✂️ Direct Cut`: Instant 0s hard cut for fast combat action, continuity cutting, and dialogue pacing.
+    - `🔀 Cross Dissolve`: Soft continuous blend for passage of time or dream sequences.
+    - `🌓 Dip to Black`: Fades to black and fades back in for chapter endings and dramatic breathers.
+    - `☀️ Flash to White`: High-intensity white flash for gun blasts, explosions, shockwaves, and impact frames.
+    - `⬅️ Wipe / Whip Left`: Horizontal camera sweep matching lateral momentum and vehicle chases.
+    - `➡️ Wipe / Whip Right`: Forward momentum push.
+    - `⭕ Iris Circle`: Classic/comic iris reveal focusing on a primary hero asset.
+  - **Kinetic Pacing Presets**: Instant one-click duration buttons (`⚡ Kinetic 0.2s`, `🎬 Snappy 0.5s`, `🌊 Standard 0.8s`, `⏳ Cinematic 1.2s`) plus a fine scrub slider.
+  - **"Apply to All Cuts"**: One-click global application across every cut on the timeline.
+- **Dual-Deck Real-Time Playback Engine**:
+  - Live transition execution in the Program Monitor using dual video decks (`Deck A` and `Deck B`) powered by hardware-accelerated CSS `clip-path` sweeps and opacity ramps.
+  - Clean deck handover ensuring video never loops back or hitches mid-transition.
+- **Audio Stem Management & Waveform Zoom**:
+  - Time-anchored canvas audio waveforms that scale dynamically with timeline zoom levels while preserving audio sample alignment.
+  - Visual Sequence End markers indicating when audio stems extend beyond the primary edit.
+  - Multi-band audio mixer with volume sliders, mute/solo controls, and stereo panning.
+- **Master Video Export (FFmpeg)**: Conforms resolutions (1080p, 720p, or 9:16 vertical), normalizes frame rates and stereo audio, and executes native FFmpeg `xfade` filter graphs for seamless master MP4 rendering.
 
 ---
 

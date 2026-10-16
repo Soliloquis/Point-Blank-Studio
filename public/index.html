@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.7.10">
+  <link rel="stylesheet" href="style.css?v=2.7.11">
 </head>
 <body>
   <!-- Top App Header -->
@@ -1877,44 +1877,107 @@
     </div>
   </div>
 
-  <!-- Transition Settings Modal (Timeline Cut / Dissolve / Fade to Black / Wipe) -->
+  <!-- Transition Settings Modal (Timeline Directing & Transitions) -->
   <div class="modal-backdrop hidden" id="transition-modal">
-    <div class="modal-card" style="max-width: 440px;">
+    <div class="modal-card" style="max-width: 580px;">
       <div class="modal-header">
         <div class="modal-title-wrap">
           <span class="icon-indicator">🔀</span>
-          <h3>Shot Transition Settings</h3>
+          <div>
+            <h3>Shot Transition & Directing Rhythm</h3>
+            <span class="modal-subtitle" id="trans-seam-subtitle">Configure cut-point transition between clips</span>
+          </div>
         </div>
         <button class="btn-icon" id="close-transition-modal-btn">✕</button>
       </div>
       <div class="modal-body">
-        <p class="modal-desc" style="margin-bottom:14px;">Select the cinematic transition between these two timeline clips.</p>
-        
-        <div class="form-group">
-          <label for="trans-type-select">Transition Type</label>
-          <select id="trans-type-select" class="text-input">
-            <option value="cut">✂️ Direct Cut (No Blend)</option>
-            <option value="dissolve" selected>🔀 Cross Dissolve (Smooth Blend)</option>
-            <option value="fadeblack">🌓 Fade to Black</option>
-            <option value="fadewhite">☀️ Fade to White</option>
-            <option value="wipeleft">⬅️ Wipe Left</option>
-            <option value="wiperight">➡️ Wipe Right</option>
-            <option value="circleopen">⭕ Circle Open</option>
-          </select>
+        <div class="trans-seam-badge" id="trans-seam-badge" style="margin-bottom:14px; padding:8px 12px; background:rgba(15,23,42,0.7); border:1px solid rgba(56,189,248,0.25); border-radius:6px; display:flex; align-items:center; justify-content:space-between;">
+          <span id="trans-outgoing-clip" style="font-weight:600; color:#cbd5e1; font-size:0.85rem;">Outgoing Shot</span>
+          <span style="color:var(--accent-cyan); font-size:0.9rem;">➔ [ Cut Point ] ➔</span>
+          <span id="trans-incoming-clip" style="font-weight:600; color:#cbd5e1; font-size:0.85rem;">Incoming Shot</span>
         </div>
 
-        <div class="form-group" id="trans-duration-group">
-          <label for="trans-duration-input">Duration</label>
-          <div class="input-with-unit">
-            <input type="number" id="trans-duration-input" min="0.1" max="2.5" step="0.1" value="0.8">
-            <span>sec</span>
+        <label style="display:block; font-size:0.8rem; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin-bottom:8px;">Directing Transition Style</label>
+        
+        <div class="transition-style-grid" id="transition-style-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:10px; margin-bottom:16px;">
+          <div class="trans-card active" data-type="cut">
+            <div class="trans-card-icon">✂️</div>
+            <div class="trans-card-title">Direct Cut</div>
+            <div class="trans-card-desc">Hard cut, 0s. Punchy action, continuity, and dialogue rhythm.</div>
           </div>
-          <span class="hint-text">Duration of the visual transition overlap rendered via FFmpeg xfade.</span>
+          <div class="trans-card" data-type="dissolve">
+            <div class="trans-card-icon">🔀</div>
+            <div class="trans-card-title">Cross Dissolve</div>
+            <div class="trans-card-desc">Soft continuous blend. Passage of time or emotional cadence.</div>
+          </div>
+          <div class="trans-card" data-type="fadeblack">
+            <div class="trans-card-icon">🌓</div>
+            <div class="trans-card-title">Dip to Black</div>
+            <div class="trans-card-desc">Fade to black & in. Scene endings and dramatic breathers.</div>
+          </div>
+          <div class="trans-card" data-type="fadewhite">
+            <div class="trans-card-icon">☀️</div>
+            <div class="trans-card-title">Flash to White</div>
+            <div class="trans-card-desc">Kinetic shock flash. Gun blasts, explosions, memory hits.</div>
+          </div>
+          <div class="trans-card" data-type="wipeleft">
+            <div class="trans-card-icon">⬅️</div>
+            <div class="trans-card-title">Whip / Wipe Left</div>
+            <div class="trans-card-desc">Horizontal camera whip tracking high-speed lateral motion.</div>
+          </div>
+          <div class="trans-card" data-type="wiperight">
+            <div class="trans-card-icon">➡️</div>
+            <div class="trans-card-title">Whip / Wipe Right</div>
+            <div class="trans-card-desc">Forward push wipe matching chase or projectile momentum.</div>
+          </div>
+          <div class="trans-card" data-type="circleopen">
+            <div class="trans-card-icon">⭕</div>
+            <div class="trans-card-title">Iris Circle</div>
+            <div class="trans-card-desc">Comic/classic iris reveal focusing on key focal hero.</div>
+          </div>
+        </div>
+
+        <!-- Hidden select for compatibility with any existing refs -->
+        <select id="trans-type-select" class="text-input hidden">
+          <option value="cut">✂️ Direct Cut</option>
+          <option value="dissolve">🔀 Cross Dissolve</option>
+          <option value="fadeblack">🌓 Dip to Black</option>
+          <option value="fadewhite">☀️ Flash to White</option>
+          <option value="wipeleft">⬅️ Wipe Left</option>
+          <option value="wiperight">➡️ Wipe Right</option>
+          <option value="circleopen">⭕ Iris Circle</option>
+        </select>
+
+        <div class="form-group" id="trans-duration-group">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label for="trans-duration-range" style="font-size:0.8rem; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin:0;">Transition Duration</label>
+            <span id="trans-duration-readout" style="font-family:var(--font-mono); color:var(--accent-cyan); font-weight:700; font-size:0.9rem;">0.8s</span>
+          </div>
+
+          <!-- Quick Duration Presets -->
+          <div class="trans-presets-row" style="display:flex; gap:8px; margin-bottom:12px;">
+            <button type="button" class="btn btn-xs btn-outline trans-dur-preset" data-dur="0.2">⚡ Kinetic (0.2s)</button>
+            <button type="button" class="btn btn-xs btn-outline trans-dur-preset" data-dur="0.5">🎬 Snappy (0.5s)</button>
+            <button type="button" class="btn btn-xs btn-outline trans-dur-preset active" data-dur="0.8">🌊 Standard (0.8s)</button>
+            <button type="button" class="btn btn-xs btn-outline trans-dur-preset" data-dur="1.2">⏳ Cinematic (1.2s)</button>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px;">
+            <input type="range" id="trans-duration-range" min="0.1" max="2.5" step="0.1" value="0.8" style="flex:1;">
+            <div class="input-with-unit" style="width:110px;">
+              <input type="number" id="trans-duration-input" min="0.1" max="2.5" step="0.1" value="0.8">
+              <span>sec</span>
+            </div>
+          </div>
+          <span class="hint-text" style="display:block; margin-top:6px;">Duration of visual overlap during preview and FFmpeg video export.</span>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="cancel-transition-modal-btn">Cancel</button>
-        <button class="btn btn-primary btn-glow" id="save-transition-modal-btn">Apply Transition</button>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn btn-secondary" id="apply-all-transitions-btn" title="Set this transition style and duration across all edit cuts on Track V1">Apply to All Cuts</button>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-secondary" id="cancel-transition-modal-btn">Cancel</button>
+          <button class="btn btn-primary btn-glow" id="save-transition-modal-btn">Apply to This Cut</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2436,6 +2499,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.7.10"></script>
+  <script src="app.js?v=2.7.11"></script>
 </body>
 </html>

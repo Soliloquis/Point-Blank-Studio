@@ -653,6 +653,53 @@ class StudioApp {
     this.closeTransitionModalBtn?.addEventListener('click', () => this.closeTransitionModal());
     this.cancelTransitionModalBtn?.addEventListener('click', () => this.closeTransitionModal());
     this.saveTransitionModalBtn?.addEventListener('click', () => this.saveTransition());
+    document.getElementById('apply-all-transitions-btn')?.addEventListener('click', () => this.applyTransitionToAllCuts());
+
+    // Transition Style Cards Click
+    document.getElementById('transition-style-grid')?.addEventListener('click', (e) => {
+      const card = e.target.closest('.trans-card');
+      if (!card) return;
+      const type = card.dataset.type;
+      this.selectedTransitionType = type;
+      if (this.transTypeSelect) this.transTypeSelect.value = type;
+      document.querySelectorAll('#transition-style-grid .trans-card').forEach(c => c.classList.toggle('active', c === card));
+      document.getElementById('trans-duration-group')?.classList.toggle('hidden', type === 'cut');
+    });
+
+    // Duration Range Slider & Number Input Sync
+    const rangeInput = document.getElementById('trans-duration-range');
+    const numInput = document.getElementById('trans-duration-input');
+    const readout = document.getElementById('trans-duration-readout');
+
+    rangeInput?.addEventListener('input', () => {
+      const val = parseFloat(rangeInput.value) || 0.8;
+      if (numInput) numInput.value = val;
+      if (readout) readout.textContent = `${val.toFixed(1)}s`;
+      document.querySelectorAll('.trans-dur-preset').forEach(preset => {
+        preset.classList.toggle('active', Math.abs(parseFloat(preset.dataset.dur) - val) < 0.05);
+      });
+    });
+
+    numInput?.addEventListener('input', () => {
+      const val = parseFloat(numInput.value) || 0.8;
+      if (rangeInput) rangeInput.value = val;
+      if (readout) readout.textContent = `${val.toFixed(1)}s`;
+      document.querySelectorAll('.trans-dur-preset').forEach(preset => {
+        preset.classList.toggle('active', Math.abs(parseFloat(preset.dataset.dur) - val) < 0.05);
+      });
+    });
+
+    // Duration Preset Chips
+    document.querySelectorAll('.trans-dur-preset').forEach(preset => {
+      preset.addEventListener('click', () => {
+        const val = parseFloat(preset.dataset.dur) || 0.8;
+        if (rangeInput) rangeInput.value = val;
+        if (numInput) numInput.value = val;
+        if (readout) readout.textContent = `${val.toFixed(1)}s`;
+        document.querySelectorAll('.trans-dur-preset').forEach(p => p.classList.toggle('active', p === preset));
+      });
+    });
+
     this.transTypeSelect?.addEventListener('change', () => {
       document.getElementById('trans-duration-group')?.classList.toggle('hidden', this.transTypeSelect.value === 'cut');
     });
@@ -3795,6 +3842,46 @@ class StudioApp {
     // Render each track lane
     if (v2Track) tracks.v2.forEach((c, i) => renderClipCard(c, i, v2Track, 'v2'));
     tracks.v1.forEach((c, i) => renderClipCard(c, i, v1Track, 'v1'));
+
+    // Render Transition Nodes on Track V1 between adjacent visual clips
+    if (tracks.v1.length > 1) {
+      const transList = this.project.timelineTransitions || [];
+      for (let i = 0; i < tracks.v1.length - 1; i++) {
+        const clipA = tracks.v1[i];
+        const seamTime = (clipA.trackStart || 0) + (clipA.effectiveDuration || 4);
+        const seamPx = Math.round(seamTime * this.timelineZoom);
+        const trans = transList[i] || { type: 'cut', duration: 0 };
+        const isCut = trans.type === 'cut' || !trans.duration;
+
+        const node = document.createElement('div');
+        node.className = 'timeline-transition-node';
+        node.style.left = `${seamPx}px`;
+        node.style.top = '50%';
+
+        const icon = this.getTransitionIcon(trans.type);
+        const label = this.getTransitionLabel(trans.type);
+        const dur = Number(trans.duration || 0).toFixed(1);
+
+        node.innerHTML = `
+          <button class="transition-pill ${!isCut ? 'has-transition' : 'is-cut'}" 
+                  title="${isCut ? 'Direct Cut (Click to change transition)' : `Transition: ${label} (${dur}s)`}"
+                  data-trans-index="${i}">
+            <span class="trans-icon">${icon}</span>
+            <span class="trans-name">${isCut ? 'Cut' : label}</span>
+            ${!isCut ? `<span class="trans-dur">${dur}s</span>` : ''}
+          </button>
+        `;
+
+        const btn = node.querySelector('.transition-pill');
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.openTransitionModal(i, trans);
+        });
+
+        v1Track.appendChild(node);
+      }
+    }
+
     if (a1Track) tracks.a1.forEach((c, i) => renderClipCard(c, i, a1Track, 'a1'));
     if (a2Track) tracks.a2.forEach((c, i) => renderClipCard(c, i, a2Track, 'a2'));
 
@@ -4543,7 +4630,7 @@ class StudioApp {
       if (visIdx !== -1 && visIdx < visualClips.length - 1) {
         const nextClip = visualClips[visIdx + 1];
         const transList = this.project.timelineTransitions || [];
-        const trans = transList[visIdx] || { type: 'dissolve', duration: 0.8 };
+        const trans = transList[visIdx] || { type: 'cut', duration: 0 };
         const trimStart = clip.trimStart || 0;
         const trimEnd = clip.trimEnd || clip.duration;
         const cDur = Math.max(0.1, trimEnd - trimStart);
@@ -4571,6 +4658,7 @@ class StudioApp {
                 inactiveImage.style.display = 'block';
                 inactiveImage.src = nextClip.url || nextClip.thumbnailUrl || '';
                 inactiveImage.style.opacity = '0';
+                inactiveImage.style.clipPath = '';
                 inactiveImage.style.zIndex = '3';
               }
             } else {
@@ -4584,6 +4672,7 @@ class StudioApp {
                 inactiveVideo.volume = this.cinemaPlayer?.volume !== undefined ? this.cinemaPlayer.volume : 1;
                 inactiveVideo.playbackRate = this.cinemaPlayer?.playbackRate || 1;
                 inactiveVideo.style.opacity = '0';
+                inactiveVideo.style.clipPath = '';
                 inactiveVideo.style.zIndex = '3';
                 inactiveVideo.play().catch(() => {});
               }
@@ -4608,6 +4697,24 @@ class StudioApp {
             const flash = Math.sin(progress * Math.PI) * 0.95;
             if (this.cinemaTransitionFlash) this.cinemaTransitionFlash.style.opacity = flash.toFixed(3);
             if (incomingEl) incomingEl.style.opacity = progress.toFixed(3);
+          } else if (trans.type === 'wipeleft') {
+            if (incomingEl) {
+              incomingEl.style.opacity = '1';
+              incomingEl.style.clipPath = `inset(0 0 0 ${(1 - progress) * 100}%)`;
+            }
+            if (outgoingEl) outgoingEl.style.opacity = '1';
+          } else if (trans.type === 'wiperight') {
+            if (incomingEl) {
+              incomingEl.style.opacity = '1';
+              incomingEl.style.clipPath = `inset(0 ${(1 - progress) * 100}% 0 0)`;
+            }
+            if (outgoingEl) outgoingEl.style.opacity = '1';
+          } else if (trans.type === 'circleopen') {
+            if (incomingEl) {
+              incomingEl.style.opacity = '1';
+              incomingEl.style.clipPath = `circle(${progress * 75}% at 50% 50%)`;
+            }
+            if (outgoingEl) outgoingEl.style.opacity = '1';
           }
 
           // When transition completes
@@ -4647,12 +4754,14 @@ class StudioApp {
     if (prevVideo) {
       prevVideo.pause();
       prevVideo.style.opacity = '0';
+      prevVideo.style.clipPath = '';
       prevVideo.style.zIndex = '1';
       prevVideo.loop = false;
     }
     if (prevImage) {
       prevImage.style.display = 'none';
       prevImage.style.opacity = '0';
+      prevImage.style.clipPath = '';
       prevImage.style.zIndex = '1';
     }
     if (this.cinemaTransitionFlash) {
@@ -4661,11 +4770,13 @@ class StudioApp {
 
     if (nextVideo) {
       nextVideo.style.opacity = '1';
+      nextVideo.style.clipPath = '';
       nextVideo.style.zIndex = '2';
       nextVideo.loop = false;
     }
     if (nextImage) {
       nextImage.style.opacity = '1';
+      nextImage.style.clipPath = '';
       nextImage.style.zIndex = '2';
     }
 
@@ -6635,10 +6746,42 @@ class StudioApp {
   // --- Timeline Transition Engine ---
   openTransitionModal(index, trans) {
     this.activeTransitionIndex = index;
-    const current = trans || { type: 'dissolve', duration: 0.8 };
-    if (this.transTypeSelect) this.transTypeSelect.value = current.type || 'dissolve';
-    if (this.transDurationInput) this.transDurationInput.value = current.duration !== undefined ? current.duration : 0.8;
-    document.getElementById('trans-duration-group')?.classList.toggle('hidden', current.type === 'cut');
+    const current = trans || { type: 'cut', duration: 0 };
+    const visualClips = this.getVisualTimelineClips();
+    const clipA = visualClips[index];
+    const clipB = visualClips[index + 1];
+    const titleA = clipA ? (clipA.title || `Shot ${index + 1}`) : `Shot ${index + 1}`;
+    const titleB = clipB ? (clipB.title || `Shot ${index + 2}`) : `Shot ${index + 2}`;
+
+    const outgoingEl = document.getElementById('trans-outgoing-clip');
+    const incomingEl = document.getElementById('trans-incoming-clip');
+    const subtitleEl = document.getElementById('trans-seam-subtitle');
+    if (outgoingEl) outgoingEl.textContent = titleA;
+    if (incomingEl) incomingEl.textContent = titleB;
+    if (subtitleEl) subtitleEl.textContent = `Cut Point between ${titleA} and ${titleB}`;
+
+    const type = current.type || 'cut';
+    this.selectedTransitionType = type;
+    document.querySelectorAll('#transition-style-grid .trans-card').forEach(card => {
+      card.classList.toggle('active', card.dataset.type === type);
+    });
+    if (this.transTypeSelect) this.transTypeSelect.value = type;
+
+    const dur = type === 'cut' ? 0.8 : (current.duration !== undefined ? Number(current.duration) : 0.8);
+    const rangeInput = document.getElementById('trans-duration-range');
+    const durInput = document.getElementById('trans-duration-input');
+    const readout = document.getElementById('trans-duration-readout');
+    if (rangeInput) rangeInput.value = dur;
+    if (durInput) durInput.value = dur;
+    if (readout) readout.textContent = `${dur.toFixed(1)}s`;
+
+    // Highlight closest preset chip
+    document.querySelectorAll('.trans-dur-preset').forEach(preset => {
+      const pDur = parseFloat(preset.dataset.dur);
+      preset.classList.toggle('active', Math.abs(pDur - dur) < 0.05);
+    });
+
+    document.getElementById('trans-duration-group')?.classList.toggle('hidden', type === 'cut');
     this.transitionModal?.classList.remove('hidden');
   }
 
@@ -6650,10 +6793,27 @@ class StudioApp {
   saveTransition() {
     if (this.activeTransitionIndex === null) return;
     this.project.timelineTransitions = this.project.timelineTransitions || [];
-    const type = this.transTypeSelect ? this.transTypeSelect.value : 'dissolve';
-    const duration = type === 'cut' ? 0 : (parseFloat(this.transDurationInput?.value) || 0.8);
+    const type = this.selectedTransitionType || (this.transTypeSelect ? this.transTypeSelect.value : 'cut');
+    const durInput = document.getElementById('trans-duration-input');
+    const duration = type === 'cut' ? 0 : (parseFloat(durInput?.value) || 0.8);
 
     this.project.timelineTransitions[this.activeTransitionIndex] = { type, duration };
+    this.closeTransitionModal();
+    this.renderTimeline();
+    this.saveProject();
+  }
+
+  applyTransitionToAllCuts() {
+    const visualClips = this.getVisualTimelineClips();
+    if (visualClips.length <= 1) return;
+    this.project.timelineTransitions = this.project.timelineTransitions || [];
+    const type = this.selectedTransitionType || (this.transTypeSelect ? this.transTypeSelect.value : 'cut');
+    const durInput = document.getElementById('trans-duration-input');
+    const duration = type === 'cut' ? 0 : (parseFloat(durInput?.value) || 0.8);
+
+    for (let i = 0; i < visualClips.length - 1; i++) {
+      this.project.timelineTransitions[i] = { type, duration };
+    }
     this.closeTransitionModal();
     this.renderTimeline();
     this.saveProject();
