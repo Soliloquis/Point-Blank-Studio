@@ -1853,6 +1853,8 @@ body {
 :root {
   --nle-upper-height: 380px;
   --nle-inspector-width: 340px;
+  --nle-media-pool-width: 310px;
+  --nle-audio-dock-width: 325px;
 }
 
 .timeline-workspace-content.nle-workspace-layout {
@@ -1872,8 +1874,8 @@ body {
   display: flex;
   flex-direction: row;
   height: var(--nle-upper-height, 380px);
-  min-height: 180px;
-  max-height: calc(100% - 160px);
+  flex: 0 0 var(--nle-upper-height, 380px);
+  min-height: 140px;
   position: relative;
   gap: 0;
   min-width: 0;
@@ -2249,13 +2251,25 @@ body {
 }
 
 .nle-splitter-col {
-  width: 10px;
+  width: 14px;
   cursor: col-resize;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 2px;
+  margin: 0 -2px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+}
+.nle-splitter-col::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  right: -8px;
+  z-index: 2;
+  cursor: col-resize;
 }
 
 .splitter-grip-col {
@@ -2278,14 +2292,26 @@ body {
 }
 
 .nle-splitter-row {
-  height: 10px;
+  height: 14px;
   cursor: row-resize;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 3px 0;
+  margin: -2px 0;
   width: 100%;
   flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+}
+.nle-splitter-row::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  cursor: row-resize;
 }
 
 .splitter-grip-row {
@@ -2298,6 +2324,7 @@ body {
   justify-content: center;
   gap: 4px;
   transition: all 0.15s ease;
+  pointer-events: none;
 }
 
 .grip-dot {
@@ -2305,6 +2332,7 @@ body {
   height: 3px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
 }
 
 .nle-splitter-row:hover, .nle-splitter-row.resizing {
@@ -2321,6 +2349,7 @@ body {
 /* 2. Right Pane: NLE Side Dock (Inspector + Audio Master & EQ) */
 .nle-side-dock {
   width: var(--nle-inspector-width, 340px);
+  flex: 0 0 var(--nle-inspector-width, 340px);
   min-width: 240px;
   max-width: 600px;
   flex-shrink: 0;
@@ -2799,7 +2828,7 @@ body {
 /* 3. Bottom Row: Timeline Multi-Track (Left) & Vertical Audio Dock (Right) */
 .nle-bottom-row {
   flex: 1 1 0%;
-  min-height: 180px;
+  min-height: 120px;
   display: flex;
   flex-direction: row;
   gap: 8px;
@@ -2810,7 +2839,7 @@ body {
 .nle-timeline-section {
   flex: 1 1 0%;
   min-width: 0;
-  min-height: 160px;
+  min-height: 110px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -2823,10 +2852,10 @@ body {
 
 /* Vertical Audio Master & Equalizer Dock */
 .nle-audio-vertical-dock {
-  flex: 0 0 325px;
-  width: 325px;
-  min-width: 295px;
-  max-width: 380px;
+  flex: 0 0 var(--nle-audio-dock-width, 325px);
+  width: var(--nle-audio-dock-width, 325px);
+  min-width: 140px;
+  max-width: 750px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -6365,4 +6394,529 @@ input[type="range"].vertical-range-slider.master-fader {
   height: 100%;
   cursor: crosshair;
   touch-action: none;
+}
+
+/* ==========================================================================
+   WORKSPACE 4: MEDIA POOL & MULTI-TRACK NLE OVERHAUL
+   ========================================================================== */
+
+/* 1. Media Pool Dock (Left Pane) */
+.nle-media-pool-dock {
+  width: var(--nle-media-pool-width, 310px);
+  flex: 0 0 var(--nle-media-pool-width, 310px);
+  min-width: 220px;
+  max-width: 500px;
+  height: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  min-height: 0;
+}
+
+body.nle-resizing {
+  user-select: none !important;
+}
+body.nle-resizing * {
+  user-select: none !important;
+  transition: none !important;
+}
+body.nle-resizing iframe,
+body.nle-resizing video,
+body.nle-resizing canvas {
+  pointer-events: none !important;
+}
+
+.nle-media-pool-dock.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  opacity: 0;
+}
+
+.media-pool-header {
+  height: 38px;
+  background: rgba(14, 18, 28, 0.98);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+.media-pool-badge {
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.12);
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.media-pool-count {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.media-pool-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.media-pool-filter-bar {
+  padding: 6px 10px;
+  background: rgba(10, 13, 20, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.media-pool-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mp-filter-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mp-filter-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+}
+
+.mp-filter-chip.active {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: rgba(99, 102, 241, 0.6);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+}
+
+.media-pool-search-wrap input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  color: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.media-pool-search-wrap input:focus {
+  border-color: var(--accent-cyan);
+}
+
+.media-pool-items-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(6, 9, 14, 0.8);
+  min-height: 0;
+}
+
+.media-pool-items-container.drag-over {
+  background: rgba(6, 182, 212, 0.1) !important;
+  outline: 2px dashed var(--accent-cyan);
+  outline-offset: -4px;
+}
+
+.mp-item-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  cursor: grab;
+  transition: all 0.15s ease;
+  position: relative;
+  user-select: none;
+}
+
+.mp-item-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+.mp-item-card:active {
+  cursor: grabbing;
+  opacity: 0.8;
+}
+
+.mp-item-thumb {
+  width: 48px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #000;
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mp-item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mp-item-thumb-audio {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(6, 78, 59, 0.4));
+  color: #6ee7b7;
+  font-size: 1.1rem;
+}
+
+.mp-item-thumb-video-icon {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 0.55rem;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+.mp-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mp-item-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.mp-type-badge {
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 0 4px;
+  border-radius: 2px;
+  letter-spacing: 0.04em;
+}
+
+.mp-type-badge.video {
+  background: rgba(99, 102, 241, 0.25);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.mp-type-badge.image {
+  background: rgba(236, 72, 153, 0.25);
+  color: #f472b6;
+  border: 1px solid rgba(236, 72, 153, 0.4);
+}
+
+.mp-type-badge.audio {
+  background: rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.mp-item-dur {
+  color: var(--text-dim);
+}
+
+.mp-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.mp-item-card:hover .mp-item-actions {
+  opacity: 1;
+}
+
+.mp-action-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.65rem;
+  transition: all 0.15s ease;
+}
+
+.mp-action-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.mp-action-btn.del-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.mp-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text-dim);
+  padding: 20px;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+/* 2. Multi-Track NLE Timeline Styles */
+.track-pill.track-v2 {
+  background: rgba(168, 85, 247, 0.3);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.5);
+}
+.track-pill.track-a2 {
+  background: rgba(245, 158, 11, 0.3);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.nle-track-header-cell.v2-header {
+  height: 52px;
+}
+.nle-track-header-cell.v1-header {
+  height: 60px;
+}
+.nle-track-header-cell.a1-header {
+  height: 44px;
+}
+.nle-track-header-cell.a2-header {
+  height: 44px;
+}
+
+.nle-lane-v2 {
+  height: 52px;
+  background: rgba(24, 18, 36, 0.65);
+}
+.nle-lane-v1 {
+  height: 60px;
+  background: rgba(16, 20, 30, 0.65);
+}
+.nle-lane-a1 {
+  height: 44px;
+  background: rgba(10, 18, 22, 0.65);
+}
+.nle-lane-a2 {
+  height: 44px;
+  background: rgba(18, 15, 10, 0.65);
+}
+
+.nle-track-lane.dragover {
+  background: rgba(6, 182, 212, 0.15) !important;
+  outline: 2px dashed var(--accent-cyan);
+  outline-offset: -2px;
+}
+
+.nle-clip-v2 {
+  height: 46px;
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.9), rgba(49, 16, 77, 0.95));
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+}
+.nle-clip-v2.active {
+  border-color: #c084fc;
+  box-shadow: 0 0 16px rgba(192, 132, 252, 0.6);
+  z-index: 5;
+}
+
+.nle-clip-a2 {
+  height: 38px;
+  background: linear-gradient(135deg, rgba(120, 53, 15, 0.85), rgba(69, 26, 3, 0.9));
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+}
+.nle-clip-a2.active {
+  border-color: #fbbf24;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.6);
+  z-index: 5;
+}
+
+.nle-clip-image {
+  border-left: 3px solid #f472b6 !important;
+}
+
+/* 3. Layered Audio Mixer Strips */
+.audio-mode-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  padding: 2px;
+}
+.audio-tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.audio-tab-btn:hover {
+  color: #fff;
+}
+.audio-tab-btn.active {
+  background: rgba(6, 182, 212, 0.25);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.3);
+}
+
+.strip-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 2px;
+}
+.audio-stem-pill {
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.audio-stem-pill.dialogue {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.audio-stem-pill.sfx {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+.strip-mini-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.strip-micro-btn {
+  width: 17px;
+  height: 17px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  font-size: 0.58rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+}
+.strip-micro-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+.strip-micro-btn.active-mute {
+  background: rgba(239, 68, 68, 0.3) !important;
+  border-color: #ef4444 !important;
+  color: #ef4444 !important;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+.strip-micro-btn.active-solo {
+  background: rgba(245, 158, 11, 0.3) !important;
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+}
+.strip-pan-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  padding-top: 2px;
+}
+.pan-label {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+.pan-slider {
+  width: 80%;
+  height: 3px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
 }

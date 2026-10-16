@@ -176,8 +176,11 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
       const trimStart = Number(clip.trimStart || 0);
       const hasTrimEnd = clip.trimEnd !== undefined && clip.trimEnd !== null && Number(clip.trimEnd) > 0;
       
+      const isImage = Boolean(clip.isAnimatic || /\.(png|jpg|jpeg|webp)$/i.test(clip.filePath || clip.url || ''));
       const args = ['-y'];
-      if (trimStart > 0) {
+      if (isImage) {
+        args.push('-loop', '1');
+      } else if (trimStart > 0) {
         args.push('-ss', `${trimStart}`);
       }
 
@@ -191,19 +194,20 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
       const hasCustomAudio = customAudioPath && fs.existsSync(customAudioPath);
       if (hasCustomAudio) {
         args.push('-i', customAudioPath);
+      } else if (isImage) {
+        // Provide silent audio for image clip so all clips have audio stream
+        args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100');
       }
 
-      if (hasTrimEnd) {
-        const trimDuration = Number(clip.trimEnd) - trimStart;
-        if (trimDuration > 0) {
-          args.push('-t', `${trimDuration}`);
-        }
+      const trimDuration = hasTrimEnd ? (Number(clip.trimEnd) - trimStart) : (Number(clip.duration) || 4);
+      if (trimDuration > 0) {
+        args.push('-t', `${trimDuration}`);
       }
 
       const [w, h] = targetResolution.split('x');
       const vf = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,format=yuv420p`;
 
-      if (hasCustomAudio) {
+      if (hasCustomAudio || isImage) {
         args.push(
           '-vf', vf,
           '-map', '0:v:0',

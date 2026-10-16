@@ -160,6 +160,20 @@ const clipUpload = multer({
   limits: { fileSize: 500 * 1024 * 1024 }
 });
 
+const mediaPoolUpload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: 500 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowed = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp3', '.wav', '.ogg', '.aac', '.m4a', '.flac'];
+    if (allowed.includes(ext) || file.mimetype.startsWith('video/') || file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/')) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported file type: ${ext}`));
+    }
+  }
+});
+
 // Settings / Config
 let appConfig = {
   videoProvider: process.env.VIDEO_PROVIDER || 'fal', // 'fal', 'kling', 'simulator', 'custom'
@@ -3151,6 +3165,180 @@ app.post('/api/populate-timeline', (req, res) => {
 
   saveProject(project);
   res.json({ success: true, timeline: project.timeline, addedCount: shotsToImport.length });
+});
+
+// =========================================================================
+// Media Pool Endpoints (Video, Image, Audio for Decoupled Timeline Assembly)
+// =========================================================================
+
+// Get all items in Media Pool
+app.get('/api/media-pool', (req, res) => {
+  const project = getProject();
+  res.json({ success: true, mediaPool: project.mediaPool || [] });
+});
+
+// Synchronize all approved Storyboard shots into Media Pool
+app.post('/api/media-pool/sync-storyboard', (req, res) => {
+  const project = getProject();
+  project.mediaPool = project.mediaPool || [];
+  const approvedShots = (project.storyboard || []).filter(s => s.approved);
+  
+  if (approvedShots.length === 0) {
+    return res.status(400).json({ error: 'No approved storyboard shots found to sync.' });
+  }
+
+  let addedCount = 0;
+
+  approvedShots.forEach(shot => {
+    // 1. Video take (if available)
+    if (shot.generatedClip && shot.generatedClip.url) {
+      const vidExists = project.mediaPool.some(m => m.url === shot.generatedClip.url || (m.shotId === shot.id && m.type === 'video'));
+      if (!vidExists) {
+        project.mediaPool.push({
+          id: `mp_vid_${shot.id}_${Date.now()}`,
+          name: `${shot.title || 'Shot'} (Take)`,
+          type: 'video',
+          url: shot.generatedClip.url,
+          filePath: shot.generatedClip.filePath || '',
+          thumbnailUrl: shot.styledKeyframeUrl || shot.keyframeUrl || '',
+          duration: Number(shot.generatedClip.duration || shot.duration || 4.0),
+          source: 'storyboard',
+          shotId: shot.id,
+          model: shot.generatedClip.model || 'Wan 2.1',
+          createdAt: Date.now()
+        });
+        addedCount++;
+      }
+    }
+
+    // 2. Styled Keyframe / Animatic Still Image (if available)
+    const imgUrl = shot.styledKeyframeUrl || shot.keyframeUrl;
+    if (imgUrl) {
+      const imgExists = project.mediaPool.some(m => m.url === imgUrl);
+      if (!imgExists) {
+        project.mediaPool.push({
+          id: `mp_img_${shot.id}_${Date.now()}`,
+          name: `${shot.title || 'Shot'} (Keyframe Still)`,
+          type: 'image',
+          url: imgUrl,
+          filePath: shot.styledKeyframePath || shot.keyframePath || '',
+          thumbnailUrl: imgUrl,
+          duration: Number(shot.duration || 4.0),
+          source: 'storyboard',
+          shotId: shot.id,
+          createdAt: Date.now()
+        });
+        addedCount++;
+      }
+    }
+
+    // 3. Audio stems (if available)
+    if (Array.isArray(shot.audioTracks)) {
+      shot.audioTracks.forEach(track => {
+        if (track && track.url) {
+          const audExists = project.mediaPool.some(m => m.url === track.url);
+          if (!audExists) {
+            project.mediaPool.push({
+              id: `mp_aud_${shot.id}_${track.id || Date.now()}`,
+              name: `${shot.title || 'Shot'} (${track.type === 'dialogue' ? 'Dialogue' : 'SFX Stem'})`,
+              type: 'audio',
+              url: track.url,
+              filePath: track.filePath || '',
+              thumbnailUrl: '',
+              duration: Number(track.duration || shot.duration || 4.0),
+              source: 'storyboard',
+              shotId: shot.id,
+              createdAt: Date.now()
+            });
+            addedCount++;
+          }
+        }
+      });
+    }
+  });
+
+  saveProject(project);
+  res.json({ success: true, addedCount, mediaPool: project.mediaPool });
+});
+
+// Upload local external media files into Media Pool
+app.post('/api/media-pool/upload', mediaPoolUpload.array('files', 10), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded.' });
+    }
+
+    const project = getProject();
+    project.mediaPool = project.mediaPool || [];
+    const addedItems = [];
+
+    for (const file of req.files) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const baseName = path.basename(file.originalname, ext);
+      
+      const isVideo = ['.mp4', '.webm', '.mov', '.mkv'].includes(ext) || file.mimetype.startsWith('video/');
+      const isImage = ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext) || file.mimetype.startsWith('image/');
+      const isAudio = ['.mp3', '.wav', '.ogg', '.aac', '.m4a', '.flac'].includes(ext) || file.mimetype.startsWith('audio/');
+
+      let mediaType = 'image';
+      let duration = 4.0;
+      let thumbnailUrl = `/storage/uploads/${file.filename}`;
+
+      if (isVideo) {
+        mediaType = 'video';
+        try {
+          duration = await getVideoDuration(file.path);
+        } catch (e) {
+          duration = 5.0;
+        }
+        try {
+          const thumb = await extractSingleKeyframe(file.path, KEYFRAMES_DIR, Math.min(0.8, duration * 0.1), 'mp_thumb');
+          if (thumb) thumbnailUrl = thumb.frameUrl;
+        } catch (e) {
+          thumbnailUrl = '';
+        }
+      } else if (isAudio) {
+        mediaType = 'audio';
+        try {
+          duration = await getVideoDuration(file.path);
+        } catch (e) {
+          duration = 4.0;
+        }
+        thumbnailUrl = '';
+      }
+
+      const item = {
+        id: `mp_upl_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        name: baseName || file.originalname,
+        filename: file.filename,
+        filePath: file.path,
+        url: `/storage/uploads/${file.filename}`,
+        thumbnailUrl,
+        type: mediaType,
+        duration: Math.max(0.5, Math.round(duration * 10) / 10),
+        source: 'upload',
+        size: file.size,
+        createdAt: Date.now()
+      };
+
+      project.mediaPool.push(item);
+      addedItems.push(item);
+    }
+
+    saveProject(project);
+    res.json({ success: true, items: addedItems, mediaPool: project.mediaPool });
+  } catch (err) {
+    res.status(500).json({ error: 'Media Pool upload failed: ' + err.message });
+  }
+});
+
+// Delete item from Media Pool
+app.delete('/api/media-pool/:id', (req, res) => {
+  const { id } = req.params;
+  const project = getProject();
+  project.mediaPool = (project.mediaPool || []).filter(m => m.id !== id);
+  saveProject(project);
+  res.json({ success: true, mediaPool: project.mediaPool });
 });
 
 // Fal.ai Balance & Account Status

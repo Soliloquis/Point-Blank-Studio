@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2.6.0">
+  <link rel="stylesheet" href="style.css?v=2.7.4">
 </head>
 <body>
   <!-- Top App Header -->
@@ -544,8 +544,8 @@
               <input type="file" id="upload-keyframes-input" accept="image/*" multiple class="file-input-hidden">
               <input type="file" id="upload-color-frame-input" accept="image/*" class="file-input-hidden">
 
-              <button class="btn btn-accent-glow btn-xs" id="btn-populate-approved-timeline" title="Send all approved shots to timeline">
-                <span>➕ To Timeline</span>
+              <button class="btn btn-accent-glow btn-xs" id="btn-populate-approved-timeline" title="Send all approved shots into Media Pool">
+                <span>➕ To Media Pool</span>
               </button>
 
               <button class="btn btn-secondary btn-danger-hover btn-sm" id="btn-clear-storyboard" title="Clear all storyboard shots and ingested videos">
@@ -608,10 +608,52 @@
       <section class="workspace-section hidden" id="workspace-timeline">
         <div class="timeline-workspace-content nle-workspace-layout">
           
-          <!-- Top Row: Program Monitor (Cinema Preview) & NLE Inspector Dock -->
-          <div class="nle-upper-row">
+          <!-- Top Row: Media Pool (Left), Program Monitor (Center) & NLE Inspector Dock (Right) -->
+          <div class="nle-upper-row" id="nle-upper-row">
             
-            <!-- Left Pane: Program Monitor -->
+            <!-- Left Pane: Media Pool for All Media Types (Video, Image, Audio) -->
+            <div class="nle-media-pool-dock" id="nle-media-pool-dock">
+              <div class="media-pool-header">
+                <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+                  <span class="media-pool-badge">MEDIA POOL</span>
+                  <span class="media-pool-count" id="media-pool-count-badge">0 Items</span>
+                </div>
+                <div class="media-pool-header-actions">
+                  <button class="btn btn-xs btn-primary btn-glow" id="btn-media-pool-import" title="Import external Video, Image, or Audio files">
+                    <span>➕ Import</span>
+                  </button>
+                  <input type="file" id="media-pool-file-input" accept="video/*,image/*,audio/*" multiple class="file-input-hidden">
+                  <button class="btn btn-xs btn-secondary" id="btn-media-pool-sync-sb" title="Sync approved shots from Storyboard into Media Pool">
+                    <span>⚡ Sync SB</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Filter Bar (All, Video, Image, Audio) & Search -->
+              <div class="media-pool-filter-bar">
+                <div class="media-pool-filter-chips">
+                  <button class="mp-filter-chip active" data-filter="all" id="mp-filter-all">All</button>
+                  <button class="mp-filter-chip" data-filter="video" id="mp-filter-video">🎬 Video</button>
+                  <button class="mp-filter-chip" data-filter="image" id="mp-filter-image">🖼️ Stills</button>
+                  <button class="mp-filter-chip" data-filter="audio" id="mp-filter-audio">🎵 Audio</button>
+                </div>
+                <div class="media-pool-search-wrap">
+                  <input type="text" id="media-pool-search" placeholder="Filter media pool..." autocomplete="off">
+                </div>
+              </div>
+
+              <!-- Media Pool Items Container / Dropzone -->
+              <div class="media-pool-items-container" id="media-pool-items-container">
+                <!-- Dynamically populated or empty drop target -->
+              </div>
+            </div>
+
+            <!-- Vertical Splitter between Media Pool and Monitor -->
+            <div class="nle-splitter nle-splitter-col" id="nle-splitter-mp" title="Drag to resize Media Pool (Double-click to collapse / expand)">
+              <div class="splitter-grip-col"></div>
+            </div>
+
+            <!-- Center Pane: Program Monitor -->
             <div class="player-container nle-monitor-box">
               <div class="player-wrapper">
                 <video id="cinema-player" class="cinema-video-deck deck-a" preload="auto" playsinline>
@@ -842,13 +884,13 @@
                   <span class="runtime-label">Duration:</span>
                   <span class="runtime-value" id="timeline-total-duration">00:00.0</span>
                 </div>
-                <button class="btn btn-secondary btn-sm" id="btn-import-approved-clips">+ Import Approved Storyboard</button>
+                <button class="btn btn-secondary btn-sm" id="btn-import-approved-clips" title="Sync approved shots to Media Pool">⚡ Sync to Media Pool</button>
                 <button class="btn btn-secondary btn-sm" id="btn-clear-timeline" title="Clear all clips and transitions from timeline">Clear All</button>
                 <button class="btn btn-primary btn-sm btn-glow" id="btn-open-export-modal" title="Stitch and render final video">🚀 Export Video</button>
               </div>
             </div>
 
-            <!-- Multi-Track Timeline Canvas Area -->
+            <!-- Multi-Track Timeline Canvas Area (V2, V1, A1, A2) -->
             <div class="nle-timeline-viewport">
               
               <!-- Track Header Column (Fixed Left) -->
@@ -856,27 +898,50 @@
                 <div class="nle-ruler-corner-header">
                   <span style="font-family:var(--font-mono); font-size:0.62rem; color:var(--text-dim);">TIMECODE</span>
                 </div>
-                <!-- V1 Video Track Header -->
+                <!-- V2 Video / Overlay Track Header -->
+                <div class="nle-track-header-cell v2-header">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="track-pill track-v track-v2">V2</span>
+                    <span class="track-name">Overlay</span>
+                  </div>
+                  <div class="track-icons">
+                    <button class="track-icon-btn" id="btn-toggle-v2-vis" title="Toggle Track Visibility">👁️</button>
+                    <button class="track-icon-btn" id="btn-toggle-v2-lock" title="Lock Track">🔒</button>
+                  </div>
+                </div>
+                <!-- V1 Video / Main Track Header -->
                 <div class="nle-track-header-cell v1-header">
                   <div style="display:flex; align-items:center; gap:6px;">
                     <span class="track-pill track-v">V1</span>
-                    <span class="track-name">Video</span>
+                    <span class="track-name">Base Video</span>
                   </div>
                   <div class="track-icons">
                     <button class="track-icon-btn" id="btn-toggle-v1-vis" title="Toggle Track Visibility">👁️</button>
                     <button class="track-icon-btn" id="btn-toggle-v1-lock" title="Lock Track">🔒</button>
                   </div>
                 </div>
-                <!-- A1 Audio Track Header -->
+                <!-- A1 Audio Track Header (Dialogue) -->
                 <div class="nle-track-header-cell a1-header">
                   <div style="display:flex; align-items:center; gap:6px;">
                     <span class="track-pill track-a">A1</span>
-                    <span class="track-name">Audio</span>
+                    <span class="track-name">Dialogue</span>
                   </div>
                   <div class="track-icons">
                     <button class="track-icon-btn audio-mute-btn" id="btn-toggle-a1-mute" title="Mute Audio (M)">M</button>
                     <button class="track-icon-btn" id="btn-toggle-a1-solo" title="Solo Audio">S</button>
                     <button class="track-icon-btn" id="btn-toggle-a1-lock" title="Lock Track">🔒</button>
+                  </div>
+                </div>
+                <!-- A2 Audio Track Header (SFX & Music) -->
+                <div class="nle-track-header-cell a2-header">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="track-pill track-a track-a2">A2</span>
+                    <span class="track-name">SFX / Music</span>
+                  </div>
+                  <div class="track-icons">
+                    <button class="track-icon-btn audio-mute-btn" id="btn-toggle-a2-mute" title="Mute Audio">M</button>
+                    <button class="track-icon-btn" id="btn-toggle-a2-solo" title="Solo Audio">S</button>
+                    <button class="track-icon-btn" id="btn-toggle-a2-lock" title="Lock Track">🔒</button>
                   </div>
                 </div>
               </div>
@@ -895,19 +960,29 @@
                   <!-- Ruler tick marks dynamically populated by JS based on zoom & duration -->
                 </div>
 
-                <!-- Track Lanes Container -->
+                <!-- Track Lanes Container (Multi-Track NLE) -->
                 <div class="nle-lanes-container">
-                  <!-- Video Lane (V1) -->
-                  <div class="nle-track-lane nle-lane-video" id="timeline-track">
+                  <!-- Video Lane (V2 Overlay) -->
+                  <div class="nle-track-lane nle-lane-video nle-lane-v2" id="timeline-track-v2" data-track="v2">
+                    <!-- Overlays & second video layer clips -->
+                  </div>
+
+                  <!-- Video Lane (V1 Main) -->
+                  <div class="nle-track-lane nle-lane-video nle-lane-v1" id="timeline-track" data-track="v1">
                     <div class="empty-timeline-state" id="empty-timeline-state">
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg>
-                      <p>Timeline empty. In the Storyboard workspace, generate shots and click "Send to Timeline"!</p>
+                      <p>Drag & drop clips, stills, or audio from the Media Pool on the left to assemble your timeline!</p>
                     </div>
                   </div>
 
-                  <!-- Audio Lane (A1) -->
-                  <div class="nle-track-lane nle-lane-audio" id="timeline-audio-lane">
-                    <!-- Audio stems dynamically rendered parallel to video clips -->
+                  <!-- Audio Lane (A1 Dialogue) -->
+                  <div class="nle-track-lane nle-lane-audio nle-lane-a1" id="timeline-audio-lane" data-track="a1">
+                    <!-- Primary audio stems -->
+                  </div>
+
+                  <!-- Audio Lane (A2 SFX / Music) -->
+                  <div class="nle-track-lane nle-lane-audio nle-lane-a2" id="timeline-track-a2" data-track="a2">
+                    <!-- Secondary SFX & music audio stems -->
                   </div>
                 </div>
 
@@ -915,58 +990,67 @@
             </div>
           </div> <!-- /timeline-container -->
 
-          <!-- Vertical Audio Master & Equalizer Dock (Sliding Timeline to the Left) -->
+          <!-- Vertical Splitter between Timeline and Audio Dock -->
+          <div class="nle-splitter nle-splitter-col" id="nle-splitter-audio" title="Drag to resize Audio Dock">
+            <div class="splitter-grip-col"></div>
+          </div>
+
+          <!-- Vertical Audio Dock: Layered Channel Mixer & Master EQ -->
             <div class="nle-audio-panel-card nle-audio-vertical-dock" id="nle-audio-panel-card">
               <div class="audio-panel-header">
                 <div style="display:flex; align-items:center; gap:6px;">
                   <span class="audio-panel-badge">AUDIO</span>
-                  <span class="audio-panel-title">Master & EQ</span>
-                </div>
-                <div class="eq-presets-group">
-                  <span class="eq-preset-chip hidden" id="eq-preset-indicator">Flat</span>
-                  <button class="eq-preset-btn active" id="btn-eq-flat" data-preset="flat" title="Flat EQ">Flat</button>
-                  <button class="eq-preset-btn" id="btn-eq-dialogue" data-preset="dialogue" title="Voice Boost">Voice</button>
-                  <button class="eq-preset-btn" id="btn-eq-bass" data-preset="bass" title="Bass Boost">Bass</button>
-                  <button class="eq-preset-btn" id="btn-eq-cinema" data-preset="cinema" title="Cinema Dynamic">Cinema</button>
+                  <div class="audio-mode-tabs">
+                    <button class="audio-tab-btn active" id="btn-audio-mode-mixer" title="Layered Audio Channel Mixer">🎚️ Mixer</button>
+                    <button class="audio-tab-btn" id="btn-audio-mode-eq" title="Master 3-Band Equalizer">🎛️ EQ</button>
+                  </div>
                 </div>
               </div>
 
-              <div class="audio-panel-body audio-mixer-body-vertical">
+              <!-- Body 1: Layered Multi-Track Channel Mixer -->
+              <div class="audio-panel-body audio-mixer-body-vertical" id="audio-mixer-view">
                 <div class="audio-mixer-strips">
-                  <!-- Strip 1: Low (Bass) -->
+                  <!-- Strip 1: A1 Dialogue Channel -->
                   <div class="mixer-strip">
-                    <span class="strip-label">Low</span>
-                    <span class="strip-val" id="eq-low-badge">0 dB</span>
-                    <div class="strip-slider-wrap">
-                      <input type="range" class="vertical-range-slider" id="eq-low-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Bass (100Hz)">
+                    <div class="strip-header-row">
+                      <span class="strip-label audio-stem-pill dialogue">A1</span>
+                      <div class="strip-mini-btns">
+                        <button class="strip-micro-btn" id="btn-mix-a1-mute" title="Mute A1">M</button>
+                        <button class="strip-micro-btn" id="btn-mix-a1-solo" title="Solo A1">S</button>
+                      </div>
                     </div>
-                    <span class="strip-freq">100Hz</span>
+                    <span class="strip-val" id="mix-a1-val-badge">0 dB</span>
+                    <div class="strip-slider-wrap">
+                      <input type="range" class="vertical-range-slider" id="mix-a1-slider" min="-30" max="6" step="0.5" value="0" orient="vertical" title="A1 Track Volume">
+                    </div>
+                    <div class="strip-pan-wrap">
+                      <span class="pan-label">PAN</span>
+                      <input type="range" class="pan-slider" id="mix-a1-pan" min="-1" max="1" step="0.1" value="0" title="A1 Pan (L/R)">
+                    </div>
                   </div>
 
-                  <!-- Strip 2: Mid (Voice) -->
+                  <!-- Strip 2: A2 SFX / Music Channel -->
                   <div class="mixer-strip">
-                    <span class="strip-label">Mid</span>
-                    <span class="strip-val" id="eq-mid-badge">0 dB</span>
-                    <div class="strip-slider-wrap">
-                      <input type="range" class="vertical-range-slider" id="eq-mid-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Voice / Mids (1kHz)">
+                    <div class="strip-header-row">
+                      <span class="strip-label audio-stem-pill sfx">A2</span>
+                      <div class="strip-mini-btns">
+                        <button class="strip-micro-btn" id="btn-mix-a2-mute" title="Mute A2">M</button>
+                        <button class="strip-micro-btn" id="btn-mix-a2-solo" title="Solo A2">S</button>
+                      </div>
                     </div>
-                    <span class="strip-freq">1kHz</span>
+                    <span class="strip-val" id="mix-a2-val-badge">0 dB</span>
+                    <div class="strip-slider-wrap">
+                      <input type="range" class="vertical-range-slider" id="mix-a2-slider" min="-30" max="6" step="0.5" value="0" orient="vertical" title="A2 Track Volume">
+                    </div>
+                    <div class="strip-pan-wrap">
+                      <span class="pan-label">PAN</span>
+                      <input type="range" class="pan-slider" id="mix-a2-pan" min="-1" max="1" step="0.1" value="0" title="A2 Pan (L/R)">
+                    </div>
                   </div>
 
-                  <!-- Strip 3: High (Treble) -->
-                  <div class="mixer-strip">
-                    <span class="strip-label">High</span>
-                    <span class="strip-val" id="eq-high-badge">0 dB</span>
-                    <div class="strip-slider-wrap">
-                      <input type="range" class="vertical-range-slider" id="eq-high-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Treble (8kHz)">
-                    </div>
-                    <span class="strip-freq">8kHz</span>
-                  </div>
-
-                  <!-- Divider between EQ and Master -->
                   <div class="mixer-strip-divider"></div>
 
-                  <!-- Strip 4: Master Volume & Peak VU Meter -->
+                  <!-- Strip 3: Master Output Bus & Peak Meter -->
                   <div class="mixer-strip master-strip">
                     <span class="strip-label master-accent">Master</span>
                     <span class="strip-val" id="volume-val-label">100%</span>
@@ -994,6 +1078,42 @@
                       <svg id="icon-volume-on" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                       <svg id="icon-volume-muted" class="hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Body 2: Master 3-Band Equalizer (Hidden when in Mixer mode) -->
+              <div class="audio-panel-body audio-mixer-body-vertical hidden" id="audio-eq-view">
+                <div class="eq-presets-group" style="margin-bottom:8px; justify-content:center;">
+                  <button class="eq-preset-btn active" id="btn-eq-flat" data-preset="flat">Flat</button>
+                  <button class="eq-preset-btn" id="btn-eq-dialogue" data-preset="dialogue">Voice</button>
+                  <button class="eq-preset-btn" id="btn-eq-bass" data-preset="bass">Bass</button>
+                  <button class="eq-preset-btn" id="btn-eq-cinema" data-preset="cinema">Cinema</button>
+                </div>
+                <div class="audio-mixer-strips">
+                  <div class="mixer-strip">
+                    <span class="strip-label">Low</span>
+                    <span class="strip-val" id="eq-low-badge">0 dB</span>
+                    <div class="strip-slider-wrap">
+                      <input type="range" class="vertical-range-slider" id="eq-low-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Bass (100Hz)">
+                    </div>
+                    <span class="strip-freq">100Hz</span>
+                  </div>
+                  <div class="mixer-strip">
+                    <span class="strip-label">Mid</span>
+                    <span class="strip-val" id="eq-mid-badge">0 dB</span>
+                    <div class="strip-slider-wrap">
+                      <input type="range" class="vertical-range-slider" id="eq-mid-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Voice / Mids (1kHz)">
+                    </div>
+                    <span class="strip-freq">1kHz</span>
+                  </div>
+                  <div class="mixer-strip">
+                    <span class="strip-label">High</span>
+                    <span class="strip-val" id="eq-high-badge">0 dB</span>
+                    <div class="strip-slider-wrap">
+                      <input type="range" class="vertical-range-slider" id="eq-high-slider" min="-12" max="12" step="1" value="0" orient="vertical" title="Treble (8kHz)">
+                    </div>
+                    <span class="strip-freq">8kHz</span>
                   </div>
                 </div>
               </div>
@@ -1404,7 +1524,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="close-preview-modal-footer-btn">Close</button>
-        <button class="btn btn-primary" id="btn-modal-add-timeline">Add to Timeline</button>
+        <button class="btn btn-primary" id="btn-modal-add-timeline">Add to Media Pool</button>
       </div>
     </div>
   </div>
@@ -2267,6 +2387,37 @@
     </div>
   </div>
 
+  <!-- Modal: Clear Timeline Confirmation -->
+  <div class="modal-backdrop hidden" id="modal-clear-timeline-confirm">
+    <div class="modal-card" style="max-width: 480px; text-align: left;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1.3rem;">⚠️</span>
+          <div>
+            <h3 style="margin:0; font-size:1.05rem;">Clear Sequence Timeline?</h3>
+            <span class="modal-subtitle">Non-destructive sequence reset</span>
+          </div>
+        </div>
+        <button class="btn-icon" id="btn-close-clear-timeline-modal">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px;">
+        <p style="color:var(--text-main); font-size:0.88rem; line-height:1.5; margin-bottom:12px;">
+          Are you sure you want to clear all clips and transitions from the timeline tracks (<strong style="color:var(--accent-cyan);">V1</strong>, <strong style="color:#a855f7;">V2</strong>, <strong style="color:#10b981;">A1</strong>, <strong style="color:#f59e0b;">A2</strong>)?
+        </p>
+        <div style="background:rgba(255, 77, 106, 0.08); border:1px solid rgba(255, 77, 106, 0.25); border-radius:var(--radius-sm); padding:10px 14px; font-size:0.78rem; color:#ff8095; display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1rem;">ℹ️</span>
+          <span>Your <strong>Media Pool</strong> items and <strong>Storyboard</strong> shots are completely safe and will not be deleted.</span>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" id="btn-cancel-clear-timeline">Cancel</button>
+        <button class="btn btn-danger btn-glow" id="btn-confirm-clear-timeline" style="background:#ef4444; color:#fff;">
+          <span>🗑️ Clear Entire Timeline</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Floating @mention Autocomplete Dropdown for Storyboard textareas -->
   <div id="at-mention-dropdown" class="at-mention-dropdown hidden"></div>
 
@@ -2285,6 +2436,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.6.0"></script>
+  <script src="app.js?v=2.7.4"></script>
 </body>
 </html>
