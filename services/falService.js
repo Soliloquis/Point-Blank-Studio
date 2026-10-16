@@ -656,6 +656,7 @@ CRITICAL PRESERVATION MANDATE:
         generate_audio: shouldGenerateAudio
       };
       if (tailDataUri) {
+        payload.end_image_url = tailDataUri;
         payload.last_image = tailDataUri;
       }
     } else {
