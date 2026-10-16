@@ -89,13 +89,16 @@ class StudioApp {
     this.activeMentionMatchIndex = 0;
 
     // Reference Construction Workspace Elements
-    this.referencesGrid = document.getElementById('references-grid');
+    this.refGroupsContainer = document.getElementById('ref-groups-container');
+    this.referencesGrid = document.getElementById('ref-groups-container') || document.getElementById('references-grid');
+    this.refStickyTabBar = document.getElementById('ref-sticky-tab-bar');
+    this.refGroupTabs = document.querySelectorAll('.ref-group-tab');
     this.btnOpenCreateRefModal = document.getElementById('btn-open-create-ref-modal');
     this.countAllRefs = document.getElementById('count-all-refs');
     this.countCharRefs = document.getElementById('count-char-refs');
     this.countPropRefs = document.getElementById('count-prop-refs');
     this.countPlaceRefs = document.getElementById('count-place-refs');
-    this.refFilterPills = document.querySelectorAll('.ref-filter-pill');
+    this.refFilterPills = document.querySelectorAll('.ref-group-tab');
 
     // Reference Create/Edit Modal Elements
     this.referenceAssetModal = document.getElementById('reference-asset-modal');
@@ -469,6 +472,7 @@ class StudioApp {
 
     // Layered Restyle Studio Events
     this.initLayerStudioEvents();
+    this.initRangeModalEvents();
 
     // Stage 1: Style Anchor Image Dropzone
     this.stage1Dropzone?.addEventListener('click', (e) => {
@@ -555,17 +559,11 @@ class StudioApp {
       this.saveRestyleSettings(isPlayblast, val);
     });
 
-    // Reference Construction Workspace Filters & Actions
-    this.refFilterPills.forEach(pill => {
-      pill.addEventListener('click', () => {
-        this.refFilterPills.forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        const cat = pill.dataset.cat || 'all';
-        this.renderReferences(cat);
-      });
-    });
+    // Reference Construction Workspace Content Group Tabs & Scrolling
+    this.initReferencesGroupTabs();
+    this.initReferencesScrollSpy();
 
-    this.btnOpenCreateRefModal?.addEventListener('click', () => this.openCreateReferenceModal());
+    this.btnOpenCreateRefModal?.addEventListener('click', () => this.openCreateReferenceModal('characters'));
     this.closeRefModalBtn?.addEventListener('click', () => this.closeReferenceModal());
     this.cancelRefModalBtn?.addEventListener('click', () => this.closeReferenceModal());
     this.saveRefBtn?.addEventListener('click', () => this.saveReferenceAsset());
@@ -1819,6 +1817,7 @@ class StudioApp {
 
     const formData = new FormData();
     formData.append('keyframeImage', file);
+    formData.append('targetFrame', this.activeReplacingTargetFrame || 'start');
 
     try {
       const res = await fetch(`/api/storyboard/${this.activeReplacingShotId}/replace-keyframe`, {
@@ -1850,6 +1849,7 @@ class StudioApp {
 
     const formData = new FormData();
     formData.append('colorFrame', file);
+    formData.append('targetFrame', this.activeColorTargetFrame || 'start');
 
     try {
       const res = await fetch(`/api/storyboard/${this.activeColorShotId}/upload-color-frame`, {
@@ -2061,6 +2061,102 @@ class StudioApp {
   }
 
   // --- Storyboard Rendering & Per-Frame Generation ---
+
+  renderKeyframePipelineRow(shot, index, targetFrame = 'start') {
+    const isEnd = targetFrame === 'end';
+    const label = isEnd ? 'END FRAME' : 'START FRAME';
+    const spatialUrl = isEnd ? shot.endKeyframeUrl : shot.keyframeUrl;
+    const colorUrl = isEnd ? shot.endColorFrameUrl : shot.colorFrameUrl;
+    const layers = isEnd ? (shot.endLayers || shot.layers || []) : (shot.layers || []);
+    const compOutUrl = isEnd ? (shot.compositeEndKeyframeUrl || shot.stage2EndImageUrl) : (shot.compositeKeyframeUrl || shot.stage2ImageUrl);
+    const restyleUrl = isEnd ? shot.styledEndKeyframeUrl : shot.styledKeyframeUrl;
+    const isOutdated = !isEnd && Boolean(shot.styledAt && (
+      ((this.project.visualReference?.updatedAt || 0) > shot.styledAt) ||
+      ((this.project.lastReferenceUpdatedAt || 0) > shot.styledAt)
+    ));
+
+    return `
+      <div class="shot-pipeline-row" data-target-frame="${targetFrame}">
+        <div class="shot-pipeline-label">${label}</div>
+        <div class="shot-pipeline-thumbs">
+          <!-- Stage 1: Spatial Previs -->
+          <div class="visual-thumb-box clickable-keyframe ${spatialUrl ? '' : 'empty-stage-box'}" data-stage="1" data-target-frame="${targetFrame}" title="${label} Stage 1: Spatial Previs (3D playblast / camera blocking)">
+            <span class="thumb-header-badge">1. Spatial Previs</span>
+            ${(spatialUrl && (spatialUrl.endsWith('.mp4') || spatialUrl.endsWith('.webm'))) ? `
+              <video src="${spatialUrl}" muted playsinline></video>
+            ` : spatialUrl ? `
+              <img src="${spatialUrl}" alt="${label} Spatial Frame">
+            ` : `
+              <div class="empty-thumb-placeholder">
+                <span style="font-size:1.1rem;">📐</span>
+                <span>No Spatial Previs</span>
+              </div>
+            `}
+            ${spatialUrl ? `<span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>` : ''}
+            <div class="thumb-hover-actions">
+              ${(!isEnd && index > 0) ? `<button class="btn-xs btn-secondary btn-chain-tail" data-action="chain-tail" title="Chain last frame of Shot #${index}">🔗 Chain</button>` : ''}
+              <button class="btn-xs btn-secondary btn-replace-keyframe" data-action="replace-kf" data-target-frame="${targetFrame}" title="Load custom image for ${label}">📷 Replace</button>
+            </div>
+          </div>
+
+          <!-- Stage 2: True Color Reference Pass -->
+          <div class="visual-thumb-box clickable-keyframe ${colorUrl ? '' : 'empty-stage-box'}" data-stage="color" data-target-frame="${targetFrame}" title="${label} Stage 2: True Color Reference (Textured engine capture for palette & atmospheric glow)">
+            <span class="thumb-header-badge" style="background: rgba(245,158,11,0.85); color:#fff;">2. True Color</span>
+            ${colorUrl ? `
+              <img src="${colorUrl}" alt="${label} True Color Reference">
+              <span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>
+            ` : `
+              <div class="empty-stage-content">
+                <span style="font-size:1.1rem;">🎨</span>
+                <span style="font-size:0.62rem; color:var(--text-dim);">No Color Pass</span>
+                <button class="btn-xs btn-secondary" data-action="upload-color" data-target-frame="${targetFrame}" style="font-size:0.65rem; padding:2px 8px; margin-top:2px;" title="Provide textured color reference">🎨 Add Color</button>
+              </div>
+            `}
+          </div>
+
+          <!-- Stage 3: Interactive Open Compositor Action Tile -->
+          <div class="visual-thumb-box compositor-action-tile" data-action="restyle-kf" data-target-frame="${targetFrame}" title="${label} Stage 3: Open Layered Restyle Studio (Perspective Pin Warping & Asset Replacement)">
+            <span class="thumb-header-badge" style="background: rgba(59,130,246,0.85); color:#fff;">3. 📐 Open Compositor</span>
+            <div class="compositor-tile-body">
+              <div class="compositor-tile-icon">📐</div>
+              <span class="compositor-tile-title">Open Compositor</span>
+              <span class="compositor-tile-subtext">${(layers && layers.length > 0) ? `${layers.length} Layers Ready` : 'Decompose & Pin'}</span>
+            </div>
+          </div>
+
+          <!-- Stage 4: Comp Out -->
+          <div class="visual-thumb-box clickable-keyframe ${compOutUrl ? '' : 'empty-stage-box'}" data-stage="compout" data-target-frame="${targetFrame}" title="${label} Stage 4: Baked Composite Output (Warped Cutouts + Clean Background)">
+            <span class="thumb-header-badge" style="background: rgba(225,29,72,0.85); color:#fff;">4. Comp Out</span>
+            ${compOutUrl ? `
+              <img src="${compOutUrl}" alt="${label} Composite Output">
+              <span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>
+            ` : `
+              <div class="empty-stage-content">
+                <span style="font-size:1.1rem;">🧩</span>
+                <span style="font-size:0.62rem; color:var(--text-dim);">Pending Comp</span>
+              </div>
+            `}
+          </div>
+
+          <!-- Stage 5: Restyle -->
+          <div class="visual-thumb-box clickable-keyframe ${restyleUrl ? '' : 'empty-stage-box'}" data-stage="restyle" data-target-frame="${targetFrame}" title="${label} Stage 5: Final Restyled Keyframe (Neural Style Anchor Translation)">
+            <span class="thumb-header-badge" style="background: rgba(16,185,129,0.85); color:#fff;">5. Restyle</span>
+            ${isOutdated ? '<span class="outdated-indicator-dot" title="Style Anchor or Reference Assets updated"></span>' : ''}
+            ${restyleUrl ? `
+              <img src="${restyleUrl}" alt="${label} Restyled Keyframe">
+              <span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>
+            ` : `
+              <div class="empty-stage-content">
+                <span style="font-size:1.1rem;">✨</span>
+                <span style="font-size:0.62rem; color:var(--text-dim);">No Restyle</span>
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   renderStoryboard() {
     this.renderVideoSlots();
     this.storyboardGrid.innerHTML = '';
@@ -2112,81 +2208,11 @@ class StudioApp {
           </div>
         </div>
 
-        <!-- Column 2: 5-Stage Visual Progression Pipeline (1. Previs -> 2. Color -> 3. Compositor -> 4. Comp Out -> 5. Restyle) -->
-        <div class="shot-visual-pipeline">
-          <!-- Stage 1: Spatial Previs (Playblast) -->
-          <div class="visual-thumb-box clickable-keyframe" data-stage="1" title="Stage 1: Spatial Previs (3D playblast / camera blocking)">
-            <span class="thumb-header-badge">1. Spatial Previs</span>
-            ${(shot.keyframeUrl && (shot.keyframeUrl.endsWith('.mp4') || shot.keyframeUrl.endsWith('.webm'))) ? `
-              <video src="${shot.keyframeUrl}" muted playsinline></video>
-            ` : shot.keyframeUrl ? `
-              <img src="${shot.keyframeUrl}" alt="Spatial Frame ${index + 1}">
-            ` : `
-              <div class="empty-thumb-placeholder">
-                <span style="font-size:1.1rem;">📐</span>
-                <span>No Spatial Previs</span>
-              </div>
-            `}
-            <span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>
-            <div class="thumb-hover-actions">
-              ${index > 0 ? `<button class="btn-xs btn-secondary btn-chain-tail" data-action="chain-tail" title="Chain last frame of Shot #${index}">🔗 Chain</button>` : ''}
-              <button class="btn-xs btn-secondary btn-replace-keyframe" data-action="replace-kf" title="Load custom image for spatial frame">📷 Replace</button>
-            </div>
-          </div>
-
-          <!-- Stage 2: True Color Reference Pass (Textured Engine Frame) -->
-          <div class="visual-thumb-box clickable-keyframe ${shot.colorFrameUrl ? '' : 'empty-stage-box'}" data-stage="color" title="Stage 2: True Color Reference (Textured engine capture for palette & atmospheric glow)">
-            <span class="thumb-header-badge" style="background: rgba(245,158,11,0.85); color:#fff;">2. True Color</span>
-            ${shot.colorFrameUrl ? `
-              <img src="${shot.colorFrameUrl}" alt="True Color Reference">
-              <span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>
-            ` : `
-              <div class="empty-stage-content">
-                <span style="font-size:1.1rem;">🎨</span>
-                <span style="font-size:0.62rem; color:var(--text-dim);">No Color Pass</span>
-                <button class="btn-xs btn-secondary" data-action="upload-color" style="font-size:0.65rem; padding:2px 8px; margin-top:2px;" title="Provide textured/engine color reference">🎨 Add Color</button>
-              </div>
-            `}
-          </div>
-
-          <!-- Stage 3: Interactive Open Compositor Action Tile -->
-          <div class="visual-thumb-box compositor-action-tile" data-action="restyle-kf" title="Stage 3: Open Layered Restyle Studio (Perspective Pin Warping & Consistent Asset Replacement)">
-            <span class="thumb-header-badge" style="background: rgba(59,130,246,0.85); color:#fff;">3. 📐 Open Compositor</span>
-            <div class="compositor-tile-body">
-              <div class="compositor-tile-icon">📐</div>
-              <span class="compositor-tile-title">Open Compositor</span>
-              <span class="compositor-tile-subtext">${(shot.layers && shot.layers.length > 0) ? `${shot.layers.length} Layers Ready` : 'Decompose & Pin'}</span>
-            </div>
-          </div>
-
-          <!-- Stage 4: Comp Out (Perspective Composite Canvas Output) -->
-          <div class="visual-thumb-box clickable-keyframe ${(shot.compositeKeyframeUrl || shot.stage2ImageUrl) ? '' : 'empty-stage-box'}" data-stage="compout" title="Stage 4: Baked Composite Output (Warped Cutouts + Clean Background)">
-            <span class="thumb-header-badge" style="background: rgba(225,29,72,0.85); color:#fff;">4. Comp Out</span>
-            ${(shot.compositeKeyframeUrl || shot.stage2ImageUrl) ? `
-              <img src="${shot.compositeKeyframeUrl || shot.stage2ImageUrl}" alt="Composite Output">
-              <span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>
-            ` : `
-              <div class="empty-stage-content">
-                <span style="font-size:1.1rem;">🧩</span>
-                <span style="font-size:0.62rem; color:var(--text-dim);">Pending Comp</span>
-              </div>
-            `}
-          </div>
-
-          <!-- Stage 5: Restyle (Final Style-Anchored Keyframe) -->
-          <div class="visual-thumb-box clickable-keyframe ${shot.styledKeyframeUrl ? '' : 'empty-stage-box'}" data-stage="restyle" title="Stage 5: Final Restyled Keyframe (Neural Style Anchor Translation)">
-            <span class="thumb-header-badge" style="background: rgba(16,185,129,0.85); color:#fff;">5. Restyle</span>
-            ${isOutdated ? '<span class="outdated-indicator-dot" title="Style Anchor or Reference Assets updated"></span>' : ''}
-            ${shot.styledKeyframeUrl ? `
-              <img src="${shot.styledKeyframeUrl}" alt="Restyled Keyframe">
-              <span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>
-            ` : `
-              <div class="empty-stage-content">
-                <span style="font-size:1.1rem;">✨</span>
-                <span style="font-size:0.62rem; color:var(--text-dim);">No Restyle</span>
-              </div>
-            `}
-          </div>
+        <!-- Column 2: Dual-Keyframe Visual Progression Pipeline (Start Frame & End Frame) -->
+        <div class="shot-dual-pipeline-container">
+          ${this.renderKeyframePipelineRow(shot, index, 'start')}
+          <div class="shot-pipeline-divider"></div>
+          ${this.renderKeyframePipelineRow(shot, index, 'end')}
         </div>
 
         <!-- Column 3: Narrative & Motion Controls -->
@@ -2461,11 +2487,11 @@ class StudioApp {
         });
       });
 
-      // Pass 1: Restyle Keyframe
+      // Pass 1: Restyle Keyframe / Compositor Action
       const restyleBtns = card.querySelectorAll('[data-action="restyle-kf"]');
       restyleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-          this.openLayeredRestyleStudio(shot);
+          this.openLayeredRestyleStudio(shot, btn.dataset.targetFrame || 'start');
         });
       });
 
@@ -2507,54 +2533,63 @@ class StudioApp {
         });
       });
 
-      // Stage 1: Click Source Keyframe for High-Res Lightbox Review
-      const stage1Box = card.querySelector('.visual-thumb-box[data-stage="1"]');
-      if (stage1Box) {
-        stage1Box.addEventListener('click', (e) => {
-          if (!e.target.closest('button')) {
-            this.openKeyframeReviewModal(shot, 'source', 'single');
-          }
-        });
-      }
+      // Dual-Keyframe Stage Clicks for Lightbox / Action
+      card.querySelectorAll('.visual-thumb-box[data-stage]').forEach(box => {
+        box.addEventListener('click', (e) => {
+          if (e.target.closest('button')) return;
+          const stage = box.dataset.stage;
+          const targetFrame = box.dataset.targetFrame || 'start';
+          const isEnd = targetFrame === 'end';
 
-      // Stage 2: Click True Color Reference for High-Res Lightbox Review
-      const stageColorBox = card.querySelector('.visual-thumb-box[data-stage="color"]');
-      if (stageColorBox) {
-        stageColorBox.addEventListener('click', (e) => {
-          if (!e.target.closest('button')) {
-            if (shot.colorFrameUrl) {
-              this.openKeyframeReviewModal(shot, 'color', 'single');
+          if (stage === '1') {
+            const hasKf = isEnd ? Boolean(shot.endKeyframeUrl) : Boolean(shot.keyframeUrl);
+            if (hasKf) {
+              this.openKeyframeReviewModal(shot, 'source', 'single', targetFrame);
+            }
+          } else if (stage === 'color') {
+            const hasColor = isEnd ? Boolean(shot.endColorFrameUrl) : Boolean(shot.colorFrameUrl);
+            if (hasColor) {
+              this.openKeyframeReviewModal(shot, 'color', 'single', targetFrame);
             } else {
               this.activeColorShotId = shot.id;
+              this.activeColorTargetFrame = targetFrame;
               this.uploadColorFrameInput?.click();
             }
-          }
-        });
-      }
-
-      // Stage 4: Click Comp Out for High-Res Lightbox Review
-      const stageCompOutBox = card.querySelector('.visual-thumb-box[data-stage="compout"]');
-      if (stageCompOutBox) {
-        stageCompOutBox.addEventListener('click', (e) => {
-          if (!e.target.closest('button')) {
-            if (shot.compositeKeyframeUrl || shot.stage2ImageUrl) {
-              this.openKeyframeReviewModal(shot, 'compout', 'single');
+          } else if (stage === 'compout') {
+            const compUrl = isEnd ? (shot.compositeEndKeyframeUrl || shot.stage2EndImageUrl) : (shot.compositeKeyframeUrl || shot.stage2ImageUrl);
+            if (compUrl) {
+              this.openKeyframeReviewModal(shot, 'compout', 'single', targetFrame);
             } else {
-              this.openLayeredRestyleStudio(shot);
+              this.openLayeredRestyleStudio(shot, targetFrame);
+            }
+          } else if (stage === 'restyle') {
+            const restyleUrl = isEnd ? shot.styledEndKeyframeUrl : shot.styledKeyframeUrl;
+            if (restyleUrl) {
+              this.openKeyframeReviewModal(shot, 'restyle', 'single', targetFrame);
             }
           }
         });
-      }
+      });
 
-      // Stage 5: Click Restyled Keyframe for High-Res Lightbox Review
-      const stageRestyleBox = card.querySelector('.visual-thumb-box[data-stage="restyle"]');
-      if (stageRestyleBox) {
-        stageRestyleBox.addEventListener('click', (e) => {
-          if (!e.target.closest('button')) {
-            this.openKeyframeReviewModal(shot, 'restyle', 'single');
-          }
+      // Custom replacement keyframe upload for specific target frame
+      card.querySelectorAll('[data-action="replace-kf"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.activeReplacingShotId = shot.id;
+          this.activeReplacingTargetFrame = btn.dataset.targetFrame || 'start';
+          this.replaceKeyframeInput?.click();
         });
-      }
+      });
+
+      // True color frame upload for specific target frame
+      card.querySelectorAll('[data-action="upload-color"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.activeColorShotId = shot.id;
+          this.activeColorTargetFrame = btn.dataset.targetFrame || 'start';
+          this.uploadColorFrameInput?.click();
+        });
+      });
 
       // Output thumbnail click to play or open footage library if empty
       const outputBox = card.querySelector(`#output-box-${shot.id}`);
@@ -4252,7 +4287,8 @@ class StudioApp {
   }
 
   // --- Keyframe Review & Lightbox Comparison Modal ---
-  openKeyframeReviewModal(shot, target = 'source', mode = 'single') {
+  openKeyframeReviewModal(shot, target = 'source', mode = 'single', targetFrame = 'start') {
+    this.activeLightboxTargetFrame = targetFrame;
     const shots = this.project.storyboard || [];
     let idx = shots.findIndex(s => s.id === shot.id);
     if (idx === -1) idx = 0;
@@ -4293,7 +4329,9 @@ class StudioApp {
     if (!shot) return;
 
     if (this.kfModalSubtitle) {
-      this.kfModalSubtitle.textContent = shot.title ? `${shot.title} (Shot #${this.activeLightboxShotIndex + 1})` : `Shot #${this.activeLightboxShotIndex + 1}`;
+      const isEndFrame = this.activeLightboxTargetFrame === 'end';
+      const frameLabel = isEndFrame ? '[END FRAME] ' : '[START FRAME] ';
+      this.kfModalSubtitle.textContent = shot.title ? `${frameLabel}${shot.title} (Shot #${this.activeLightboxShotIndex + 1})` : `${frameLabel}Shot #${this.activeLightboxShotIndex + 1}`;
     }
     if (this.kfShotCounter) {
       this.kfShotCounter.textContent = `${this.activeLightboxShotIndex + 1} / ${shots.length}`;
@@ -4331,28 +4369,28 @@ class StudioApp {
       let emptyMsg = '';
 
       if (this.activeLightboxTarget === 'color') {
-        imgUrl = shot.colorFrameUrl;
+        imgUrl = (this.activeLightboxTargetFrame === 'end') ? (shot.endColorFrameUrl || shot.colorFrameUrl) : shot.colorFrameUrl;
         stageName = '2. True Color Reference Frame (Textured Engine Frame)';
         badgeBg = 'rgba(245, 158, 11, 0.2)';
         badgeColor = '#fbbf24';
         badgeBorder = 'rgba(245, 158, 11, 0.4)';
         emptyMsg = 'No True Color reference frame loaded yet for this shot.';
       } else if (this.activeLightboxTarget === 'compout') {
-        imgUrl = shot.compositeKeyframeUrl || shot.stage2ImageUrl;
+        imgUrl = (this.activeLightboxTargetFrame === 'end') ? (shot.compositeEndKeyframeUrl || shot.stage2EndImageUrl || shot.compositeKeyframeUrl) : (shot.compositeKeyframeUrl || shot.stage2ImageUrl);
         stageName = '4. Compositor Output (Perspective Warped Layers)';
         badgeBg = 'rgba(225, 29, 72, 0.2)';
         badgeColor = '#fb7185';
         badgeBorder = 'rgba(225, 29, 72, 0.4)';
         emptyMsg = 'No composite baked yet. Click "3. 📐 Open Compositor" on the shot card to composite layers!';
       } else if (this.activeLightboxTarget === 'restyle' || this.activeLightboxTarget === 'regened') {
-        imgUrl = shot.styledKeyframeUrl;
+        imgUrl = (this.activeLightboxTargetFrame === 'end') ? (shot.styledEndKeyframeUrl || shot.styledKeyframeUrl) : shot.styledKeyframeUrl;
         stageName = '5. Restyled Keyframe (Neural Style Anchor Translation)';
         badgeBg = 'rgba(16, 185, 129, 0.2)';
         badgeColor = '#34d399';
         badgeBorder = 'rgba(16, 185, 129, 0.4)';
         emptyMsg = 'No restyled keyframe exists yet for this shot. Bake with harmonization in the Compositor!';
       } else {
-        imgUrl = shot.keyframeUrl;
+        imgUrl = (this.activeLightboxTargetFrame === 'end') ? (shot.endKeyframeUrl || shot.keyframeUrl) : shot.keyframeUrl;
         stageName = '1. Spatial Previs Frame (3D Playblast / Proxy Matting)';
         badgeBg = 'rgba(99, 102, 241, 0.2)';
         badgeColor = '#818cf8';
@@ -4434,7 +4472,7 @@ class StudioApp {
 
     // Open the Layered Restyle Studio directly
     this.closeKeyframeLightbox();
-    this.openLayeredRestyleStudio(shot);
+    this.openLayeredRestyleStudio(shot, this.activeLightboxTargetFrame || 'start');
   }
 
   // --- Master Video Export Modal (FFmpeg) ---
@@ -4659,6 +4697,95 @@ class StudioApp {
     ];
   }
 
+  initReferencesGroupTabs() {
+    this.refGroupTabs = document.querySelectorAll('.ref-group-tab');
+    this.refGroupTabs.forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        const target = tab.dataset.target || 'all';
+        this.scrollToRefGroup(target);
+      });
+    });
+  }
+
+  scrollToRefGroup(target) {
+    if (!this.workspaceReferences) return;
+    this.isProgrammaticScrolling = true;
+    this.setActiveRefTab(target);
+
+    if (target === 'all') {
+      this.workspaceReferences.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => { this.isProgrammaticScrolling = false; }, 600);
+      return;
+    }
+
+    const groupEl = document.getElementById(`ref-group-${target}`);
+    if (groupEl) {
+      const containerRect = this.workspaceReferences.getBoundingClientRect();
+      const groupRect = groupEl.getBoundingClientRect();
+      const stickyNav = document.getElementById('ref-sticky-tab-bar');
+      const stickyHeight = stickyNav ? stickyNav.offsetHeight : 60;
+      const targetScrollTop = this.workspaceReferences.scrollTop + (groupRect.top - containerRect.top) - stickyHeight - 12;
+
+      this.workspaceReferences.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'smooth'
+      });
+    }
+    setTimeout(() => { this.isProgrammaticScrolling = false; }, 600);
+  }
+
+  setActiveRefTab(target) {
+    const tabs = document.querySelectorAll('.ref-group-tab');
+    tabs.forEach(tab => {
+      if (tab.dataset.target === target) {
+        tab.classList.add('active');
+      } else {
+        tab.classList.remove('active');
+      }
+    });
+  }
+
+  initReferencesScrollSpy() {
+    if (!this.workspaceReferences) return;
+    let scrollTicking = false;
+    this.workspaceReferences.addEventListener('scroll', () => {
+      if (this.isProgrammaticScrolling) return;
+      if (!scrollTicking) {
+        window.requestAnimationFrame(() => {
+          this.updateActiveRefGroupTabOnScroll();
+          scrollTicking = false;
+        });
+        scrollTicking = true;
+      }
+    }, { passive: true });
+  }
+
+  updateActiveRefGroupTabOnScroll() {
+    if (!this.workspaceReferences) return;
+    const scrollContainer = this.workspaceReferences;
+    const containerTop = scrollContainer.getBoundingClientRect().top;
+
+    if (scrollContainer.scrollTop < 120) {
+      this.setActiveRefTab('all');
+      return;
+    }
+
+    const groups = ['characters', 'props', 'places'];
+    let currentGroup = 'all';
+
+    for (const cat of groups) {
+      const el = document.getElementById(`ref-group-${cat}`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.top - containerTop <= 180) {
+          currentGroup = cat;
+        }
+      }
+    }
+    this.setActiveRefTab(currentGroup);
+  }
+
   updateReferenceCounts() {
     const refs = this.project?.references || { characters: [], props: [], places: [] };
     const charCount = (refs.characters || []).length;
@@ -4673,47 +4800,127 @@ class StudioApp {
     if (this.countCharRefs) this.countCharRefs.textContent = charCount;
     if (this.countPropRefs) this.countPropRefs.textContent = propCount;
     if (this.countPlaceRefs) this.countPlaceRefs.textContent = placeCount;
+
+    const groupCountChar = document.getElementById('group-count-characters');
+    if (groupCountChar) groupCountChar.textContent = `${charCount} Asset${charCount === 1 ? '' : 's'}`;
+    const groupCountProp = document.getElementById('group-count-props');
+    if (groupCountProp) groupCountProp.textContent = `${propCount} Asset${propCount === 1 ? '' : 's'}`;
+    const groupCountPlace = document.getElementById('group-count-places');
+    if (groupCountPlace) groupCountPlace.textContent = `${placeCount} Asset${placeCount === 1 ? '' : 's'}`;
   }
 
-  renderReferences(filterCat = 'all') {
-    this.activeRefCategory = filterCat;
+  renderReferences() {
     this.updateReferenceCounts();
-    if (!this.referencesGrid) return;
+    const container = document.getElementById('ref-groups-container') || this.referencesGrid;
+    if (!container) return;
 
     const refs = this.project?.references || { characters: [], props: [], places: [] };
-    let list = [];
-    if (filterCat === 'all') {
-      list = this.getAllProjectReferences();
-    } else {
-      list = refs[filterCat] || [];
-    }
+    const charList = refs.characters || [];
+    const propList = refs.props || [];
+    const placeList = refs.places || [];
 
-    if (list.length === 0) {
-      const catLabels = {
-        all: 'reference assets',
-        characters: 'characters',
-        props: 'props or vehicles',
-        places: 'places or environments'
-      };
-      this.referencesGrid.innerHTML = `
-        <div style="grid-column: 1/-1; text-align:center; padding: 60px 20px; color: var(--text-dim); border: 1px dashed rgba(255,255,255,0.12); border-radius: 12px; background: rgba(15,23,42,0.4);">
-          <span style="font-size: 2.2rem; display:block; margin-bottom: 10px;">🎨</span>
-          <p style="font-size: 1rem; font-weight:600; color:var(--text-main); margin-bottom: 6px;">No ${catLabels[filterCat] || 'assets'} defined yet</p>
-          <p style="font-size: 0.8rem; max-width: 480px; margin: 0 auto 16px auto; color: var(--text-muted);">
-            Upload visual reference images and define distinct physical traits (costume, markings, lighting, architecture) to maintain shot-to-shot consistency throughout your video.
-          </p>
-          <button class="btn btn-primary btn-glow" id="btn-empty-create-ref">
-            <span>➕ Create Reference Asset</span>
-          </button>
+    const groupConfigs = [
+      {
+        id: 'characters',
+        title: 'Characters',
+        subtitle: 'Protagonists, antagonists, NPCs, and character variations',
+        icon: '👤',
+        items: charList,
+        addLabel: '➕ Add Character',
+        emptyTitle: 'No Characters Defined',
+        emptyDesc: 'Upload a character reference image and describe distinctive costumes, armor, facial features, or hairstyles to maintain visual continuity.'
+      },
+      {
+        id: 'props',
+        title: 'Props & Vehicles',
+        subtitle: 'Weapons, capital ships, landing craft, vehicles, and key technology',
+        icon: '📦',
+        items: propList,
+        addLabel: '➕ Add Prop / Vehicle',
+        emptyTitle: 'No Props or Vehicles Defined',
+        emptyDesc: 'Upload reference images of ships, blasters, gadgets, or vehicles with color accents and hull markings.'
+      },
+      {
+        id: 'places',
+        title: 'Places & Environments',
+        subtitle: 'Planetary surfaces, low orbits, space vistas, and architecture',
+        icon: '📍',
+        items: placeList,
+        addLabel: '➕ Add Place / Environment',
+        emptyTitle: 'No Places or Environments Defined',
+        emptyDesc: 'Define key world-building locales, terrain textures, gas giant rings, and atmospheric palettes.'
+      }
+    ];
+
+    container.innerHTML = groupConfigs.map(grp => `
+      <div class="ref-content-group ref-group-${grp.id}" id="ref-group-${grp.id}" data-category="${grp.id}">
+        <div class="ref-group-header">
+          <div class="ref-group-header-left">
+            <span class="ref-group-badge-icon">${grp.icon}</span>
+            <div class="ref-group-heading-text">
+              <h3 class="ref-group-title">${grp.title}</h3>
+              <span class="ref-group-subtitle">${grp.subtitle}</span>
+            </div>
+            <span class="ref-group-count-badge" id="group-count-${grp.id}">${grp.items.length} Asset${grp.items.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="ref-group-header-right">
+            <button class="btn btn-secondary btn-xs btn-add-category-asset" data-category="${grp.id}">
+              ${grp.addLabel}
+            </button>
+          </div>
         </div>
-      `;
-      document.getElementById('btn-empty-create-ref')?.addEventListener('click', () => this.openCreateReferenceModal());
-      return;
-    }
 
+        <div class="references-grid" id="ref-grid-${grp.id}">
+          ${grp.items.length > 0 ? grp.items.map(item => this.renderReferenceCardHtml(item)).join('') : `
+            <div class="ref-empty-group-card">
+              <div class="empty-left">
+                <span class="empty-icon">${grp.icon}</span>
+                <div class="empty-text">
+                  <h4>${grp.emptyTitle}</h4>
+                  <p>${grp.emptyDesc}</p>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm btn-add-category-asset" data-category="${grp.id}">
+                ${grp.addLabel}
+              </button>
+            </div>
+          `}
+        </div>
+      </div>
+    `).join('');
+
+    // Attach card action listeners across all groups
+    container.querySelectorAll('.btn-edit-ref').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const refId = btn.dataset.refId;
+        const ref = this.getAllProjectReferences().find(r => r.id === refId);
+        if (ref) this.openEditReferenceModal(ref);
+      });
+    });
+
+    container.querySelectorAll('[data-action="delete-ref"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const refId = btn.dataset.refId;
+        this.deleteReference(refId);
+      });
+    });
+
+    container.querySelectorAll('.btn-add-category-asset').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cat = btn.dataset.category || 'characters';
+        this.openCreateReferenceModal(cat);
+      });
+    });
+
+    this.initReferencesGroupTabs();
+  }
+
+  renderReferenceCardHtml(ref) {
     const catEmoji = { characters: '👤 Character', props: '📦 Prop', places: '📍 Place' };
-
-    this.referencesGrid.innerHTML = list.map(ref => `
+    return `
       <div class="reference-card" data-ref-id="${ref.id}">
         <div class="ref-card-thumb-wrap">
           ${ref.imageUrl ? `
@@ -4760,23 +4967,7 @@ class StudioApp {
           </div>
         </div>
       </div>
-    `).join('');
-
-    // Attach card action listeners
-    this.referencesGrid.querySelectorAll('.btn-edit-ref').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const refId = btn.dataset.refId;
-        const ref = this.getAllProjectReferences().find(r => r.id === refId);
-        if (ref) this.openEditReferenceModal(ref);
-      });
-    });
-
-    this.referencesGrid.querySelectorAll('[data-action="delete-ref"]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const refId = btn.dataset.refId;
-        this.deleteReference(refId);
-      });
-    });
+    `;
   }
 
   renderShotReferenceChips(shot) {
@@ -4831,9 +5022,10 @@ class StudioApp {
     }
   }
 
-  openCreateReferenceModal() {
+  openCreateReferenceModal(category = 'characters') {
     this.refEditId.value = '';
-    this.refModalTitle.textContent = 'New Reference Asset';
+    const catTitles = { characters: 'Character', props: 'Prop / Vehicle', places: 'Place / Environment' };
+    this.refModalTitle.textContent = `New ${catTitles[category] || 'Reference Asset'}`;
     this.refNameInput.value = '';
     this.refTagInput.value = '';
     this.refDescInput.value = '';
@@ -4847,8 +5039,8 @@ class StudioApp {
     this.refDropzoneEmpty.classList.remove('hidden');
     this.refDropzonePreview.classList.add('hidden');
     this.refPreviewImg.src = '';
-    const charRadio = document.querySelector('input[name="ref-category"][value="characters"]');
-    if (charRadio) charRadio.checked = true;
+    const catRadio = document.querySelector(`input[name="ref-category"][value="${category}"]`);
+    if (catRadio) catRadio.checked = true;
     this.updateRefCategoryFields();
     this.referenceAssetModal.classList.remove('hidden');
   }
@@ -6000,23 +6192,28 @@ class StudioApp {
     }
   }
 
-  async openLayeredRestyleStudio(shot) {
+  async openLayeredRestyleStudio(shot, targetFrame = 'start') {
     if (!shot) return;
     this.activeStudioShot = shot;
+    this.activeStudioTargetFrame = targetFrame;
     this.selectedLayerId = null;
     this.studioTransformMode = 'pin';
 
+    const isEndStudio = targetFrame === 'end';
+    const frameStudioLabel = isEndStudio ? 'END FRAME' : 'START FRAME';
+
     if (this.layerStudioTitle) {
-      this.layerStudioTitle.textContent = `Layer Studio — Shot #${shot.shotNumber || shot.id}: ${shot.title || 'Shot'}`;
+      this.layerStudioTitle.textContent = `${frameStudioLabel} Layer Studio — Shot #${shot.shotNumber || shot.id}: ${shot.title || 'Shot'}`;
     }
     if (this.layerStudioSubtitle) {
-      this.layerStudioSubtitle.textContent = shot.description || 'Decomposed Consistent Asset Layers with 4-Corner Perspective Pin';
+      this.layerStudioSubtitle.textContent = shot.description || `Decomposed Consistent Asset Layers with 4-Corner Perspective Pin (${frameStudioLabel})`;
     }
 
-    if (shot.keyframeUrl) {
+    const ghostUrl = isEndStudio ? (shot.endKeyframeUrl || shot.keyframeUrl) : shot.keyframeUrl;
+    if (ghostUrl) {
       const ghostImg = new Image();
       ghostImg.crossOrigin = 'anonymous';
-      ghostImg.src = shot.keyframeUrl;
+      ghostImg.src = ghostUrl;
       ghostImg.onload = () => {
         this.studioGhostImage = ghostImg;
         this.renderCompositeCanvas();
@@ -6027,13 +6224,15 @@ class StudioApp {
 
     this.layeredRestyleModal?.classList.remove('hidden');
 
-    if (shot.layers && Array.isArray(shot.layers) && shot.layers.length > 0) {
-      this.studioLayers = JSON.parse(JSON.stringify(shot.layers));
+    const studioLayersSource = isEndStudio ? shot.endLayers : shot.layers;
+    if (studioLayersSource && Array.isArray(studioLayersSource) && studioLayersSource.length > 0) {
+      this.studioLayers = JSON.parse(JSON.stringify(studioLayersSource));
       await this.preloadStudioImages();
       this.renderLayerStudio();
     } else {
       await this.extractShotLayers(shot, false);
     }
+    return;
   }
 
   closeLayeredRestyleStudio() {
@@ -6052,9 +6251,11 @@ class StudioApp {
     }
 
     try {
+      const targetFrame = this.activeStudioTargetFrame || 'start';
       const res = await fetch(`/api/storyboard/${shot.id}/layers/extract`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetFrame })
       });
       const data = await res.json();
       if (!data.success || !Array.isArray(data.layers)) {
@@ -6062,7 +6263,11 @@ class StudioApp {
       }
 
       this.studioLayers = data.layers;
-      shot.layers = data.layers;
+      if (targetFrame === 'end') {
+        shot.endLayers = data.layers;
+      } else {
+        shot.layers = data.layers;
+      }
       this.saveProject();
 
       await this.preloadStudioImages();
@@ -7182,7 +7387,8 @@ class StudioApp {
         body: JSON.stringify({
           compositeBase64,
           harmonyStrength,
-          layers: this.studioLayers
+          layers: this.studioLayers,
+          targetFrame: this.activeStudioTargetFrame || 'start'
         })
       });
 
@@ -7202,6 +7408,315 @@ class StudioApp {
       });
     }
   }
+
+
+  // =========================================================================
+  // SHOT IN / OUT RANGE MARKER & MOTION ANALYSIS METHODS
+  // =========================================================================
+  openShotRangeModal() {
+    const videoUrl = this.project.ingestedVideo?.url || this.project.companionVideo?.url;
+    if (!videoUrl) {
+      alert('Please load a video (Spatial Previs or True Color) in the Ingest section first.');
+      return;
+    }
+
+    this.rangeActiveTrack = this.project.ingestedVideo?.url ? 'spatial' : 'color';
+    this.updateRangeVideoSource();
+
+    const shots = this.project.storyboard || [];
+    const nextShotNum = shots.length + 1;
+    if (this.rangeShotTitle) {
+      this.rangeShotTitle.value = `Shot ${nextShotNum}`;
+    }
+    if (this.rangeShotDesc) {
+      this.rangeShotDesc.value = '';
+    }
+
+    let lastEnd = 0;
+    if (shots.length > 0 && typeof shots[shots.length - 1].endTime === 'number') {
+      lastEnd = shots[shots.length - 1].endTime;
+    }
+    this.rangeInTime = lastEnd;
+    this.rangeOutTime = lastEnd + 4;
+
+    this.shotRangeModal?.classList.remove('hidden');
+
+    const onLoaded = () => {
+      const dur = this.rangeModalVideo.duration || 100;
+      if (this.rangeVideoScrubber) {
+        this.rangeVideoScrubber.max = dur;
+      }
+      if (this.rangeInTime >= dur) this.rangeInTime = 0;
+      if (this.rangeOutTime > dur) this.rangeOutTime = Math.min(dur, this.rangeInTime + 4);
+      this.seekRangeVideo(this.rangeInTime);
+      this.updateRangeTimeUi();
+      this.captureRangeFrame('in');
+      setTimeout(() => this.captureRangeFrame('out'), 250);
+      this.rangeModalVideo.removeEventListener('loadedmetadata', onLoaded);
+    };
+
+    if (this.rangeModalVideo.readyState >= 1) {
+      onLoaded();
+    } else {
+      this.rangeModalVideo.addEventListener('loadedmetadata', onLoaded);
+    }
+  }
+
+  closeShotRangeModal() {
+    if (this.rangeModalVideo) {
+      this.rangeModalVideo.pause();
+    }
+    this.shotRangeModal?.classList.add('hidden');
+  }
+
+  updateRangeVideoSource() {
+    if (!this.rangeModalVideo) return;
+    const curTime = this.rangeModalVideo.currentTime || this.rangeInTime || 0;
+    const isSpatial = this.rangeActiveTrack === 'spatial';
+    const targetUrl = isSpatial
+      ? (this.project.ingestedVideo?.url || this.project.companionVideo?.url)
+      : (this.project.companionVideo?.url || this.project.ingestedVideo?.url);
+
+    if (this.rangeTrackLabel) {
+      this.rangeTrackLabel.textContent = isSpatial ? '📐 Spatial Previs Track' : '🎨 True Color Track';
+    }
+    if (this.btnRangeToggleTrack) {
+      const canToggle = Boolean(this.project.ingestedVideo?.url && this.project.companionVideo?.url);
+      this.btnRangeToggleTrack.style.display = canToggle ? 'inline-block' : 'none';
+      this.btnRangeToggleTrack.textContent = isSpatial ? '🔄 Switch to True Color' : '🔄 Switch to Spatial Previs';
+    }
+
+    if (targetUrl && !this.rangeModalVideo.src.endsWith(targetUrl)) {
+      this.rangeModalVideo.src = targetUrl;
+      this.rangeModalVideo.currentTime = curTime;
+    }
+  }
+
+  toggleRangeTrack() {
+    this.rangeActiveTrack = this.rangeActiveTrack === 'spatial' ? 'color' : 'spatial';
+    this.updateRangeVideoSource();
+  }
+
+  seekRangeVideo(time) {
+    if (!this.rangeModalVideo) return;
+    const dur = this.rangeModalVideo.duration || 100;
+    const clamped = Math.max(0, Math.min(dur, time));
+    this.rangeModalVideo.currentTime = clamped;
+    if (this.rangeVideoScrubber) this.rangeVideoScrubber.value = clamped;
+    this.updateRangeTimeUi();
+  }
+
+  markRangeIn() {
+    if (!this.rangeModalVideo) return;
+    this.rangeInTime = +this.rangeModalVideo.currentTime.toFixed(2);
+    if (this.rangeOutTime <= this.rangeInTime) {
+      const dur = this.rangeModalVideo.duration || 100;
+      this.rangeOutTime = Math.min(dur, +(this.rangeInTime + 3).toFixed(2));
+    }
+    this.captureRangeFrame('in');
+    this.updateRangeTimeUi();
+  }
+
+  markRangeOut() {
+    if (!this.rangeModalVideo) return;
+    const cur = +this.rangeModalVideo.currentTime.toFixed(2);
+    this.rangeOutTime = Math.max(+(this.rangeInTime + 0.5).toFixed(2), cur);
+    this.captureRangeFrame('out');
+    this.updateRangeTimeUi();
+  }
+
+  captureRangeFrame(type) {
+    const canvas = type === 'in' ? this.rangePreviewStartCanvas : this.rangePreviewEndCanvas;
+    if (!canvas || !this.rangeModalVideo) return;
+
+    if (type === 'out') {
+      const savedTime = this.rangeModalVideo.currentTime;
+      const onSeeked = () => {
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(this.rangeModalVideo, 0, 0, canvas.width, canvas.height);
+        this.rangeModalVideo.removeEventListener('seeked', onSeeked);
+        this.rangeModalVideo.currentTime = savedTime;
+      };
+      this.rangeModalVideo.addEventListener('seeked', onSeeked);
+      this.rangeModalVideo.currentTime = this.rangeOutTime;
+    } else {
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(this.rangeModalVideo, 0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  updateRangeTimeUi() {
+    const cur = this.rangeModalVideo?.currentTime || 0;
+    const fps = 30;
+    const curFrame = Math.round(cur * fps);
+    const mins = Math.floor(cur / 60).toString().padStart(2, '0');
+    const secs = (cur % 60).toFixed(2).padStart(5, '0');
+
+    if (this.rangeCurrentTimecode) {
+      this.rangeCurrentTimecode.textContent = `${mins}:${secs} (F: ${curFrame})`;
+    }
+    if (this.rangeInTimeText) {
+      this.rangeInTimeText.textContent = `${this.rangeInTime.toFixed(2)}s`;
+    }
+    if (this.rangeOutTimeText) {
+      this.rangeOutTimeText.textContent = `${this.rangeOutTime.toFixed(2)}s`;
+    }
+
+    const duration = Math.max(0.1, +(this.rangeOutTime - this.rangeInTime).toFixed(2));
+    if (this.rangeDurationBadge) {
+      this.rangeDurationBadge.textContent = `${duration.toFixed(2)}s`;
+    }
+
+    if (this.rangeSliderHighlight && this.rangeModalVideo?.duration) {
+      const totalDur = this.rangeModalVideo.duration;
+      const leftPct = (this.rangeInTime / totalDur) * 100;
+      const widthPct = ((this.rangeOutTime - this.rangeInTime) / totalDur) * 100;
+      this.rangeSliderHighlight.style.left = `${Math.max(0, leftPct)}%`;
+      this.rangeSliderHighlight.style.width = `${Math.min(100 - leftPct, widthPct)}%`;
+    }
+  }
+
+  async addRangeShotToStoryboard() {
+    const startTime = this.rangeInTime;
+    const endTime = this.rangeOutTime;
+    const title = this.rangeShotTitle?.value?.trim() || '';
+    const description = this.rangeShotDesc?.value?.trim() || '';
+    const cameraMotion = this.rangeCameraMotion?.value || 'Dolly Forward';
+
+    if (this.rangeAddSpinner) this.rangeAddSpinner.classList.remove('hidden');
+    if (this.btnRangeAddShot) this.btnRangeAddShot.disabled = true;
+
+    try {
+      const res = await fetch('/api/storyboard/add-range', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startTime,
+          endTime,
+          title,
+          description,
+          cameraMotion
+        })
+      });
+
+      const data = await res.json();
+      if (!data.success || !data.shot) throw new Error(data.error || 'Failed to add shot range');
+
+      this.project.storyboard = data.storyboard || this.project.storyboard || [];
+      this.renderStoryboard();
+      this.saveProject();
+
+      const totalDur = this.rangeModalVideo?.duration || 100;
+      this.rangeInTime = Math.min(totalDur, endTime);
+      this.rangeOutTime = Math.min(totalDur, this.rangeInTime + 4);
+      this.seekRangeVideo(this.rangeInTime);
+      this.captureRangeFrame('in');
+      setTimeout(() => this.captureRangeFrame('out'), 250);
+
+      const nextShotNum = (this.project.storyboard || []).length + 1;
+      if (this.rangeShotTitle) this.rangeShotTitle.value = `Shot ${nextShotNum}`;
+      if (this.rangeShotDesc) this.rangeShotDesc.value = '';
+
+      alert(`Shot #${data.shot.shotNumber || nextShotNum - 1} added! Start & End keyframes successfully extracted.`);
+    } catch (err) {
+      alert('Error adding shot range: ' + err.message);
+    } finally {
+      if (this.rangeAddSpinner) this.rangeAddSpinner.classList.add('hidden');
+      if (this.btnRangeAddShot) this.btnRangeAddShot.disabled = false;
+    }
+  }
+
+  initRangeModalEvents() {
+    this.btnOpenShotMarker?.addEventListener('click', () => this.openShotRangeModal());
+    document.getElementById('btn-open-shot-marker-sm')?.addEventListener('click', () => this.openShotRangeModal());
+    this.closeRangeModalBtn?.addEventListener('click', () => this.closeShotRangeModal());
+    this.cancelRangeModalBtn?.addEventListener('click', () => this.closeShotRangeModal());
+
+    this.btnRangeToggleTrack?.addEventListener('click', () => this.toggleRangeTrack());
+
+    this.btnRangePlayPause?.addEventListener('click', () => {
+      if (!this.rangeModalVideo) return;
+      if (this.rangeModalVideo.paused) {
+        this.rangeModalVideo.play();
+        if (this.btnRangePlayPause) this.btnRangePlayPause.textContent = '⏸ Pause';
+      } else {
+        this.rangeModalVideo.pause();
+        if (this.btnRangePlayPause) this.btnRangePlayPause.textContent = '▶ Play';
+      }
+    });
+
+    this.rangeModalVideo?.addEventListener('timeupdate', () => {
+      if (this.rangeVideoScrubber) this.rangeVideoScrubber.value = this.rangeModalVideo.currentTime;
+      this.updateRangeTimeUi();
+    });
+
+    this.rangeModalVideo?.addEventListener('ended', () => {
+      if (this.btnRangePlayPause) this.btnRangePlayPause.textContent = '▶ Play';
+    });
+
+    this.rangeVideoScrubber?.addEventListener('input', () => {
+      this.seekRangeVideo(parseFloat(this.rangeVideoScrubber.value));
+    });
+
+    this.btnRangeStepBackSec?.addEventListener('click', () => {
+      this.seekRangeVideo((this.rangeModalVideo?.currentTime || 0) - 1);
+    });
+    this.btnRangeStepFwdSec?.addEventListener('click', () => {
+      this.seekRangeVideo((this.rangeModalVideo?.currentTime || 0) + 1);
+    });
+    this.btnRangeStepBackFrame?.addEventListener('click', () => {
+      this.seekRangeVideo((this.rangeModalVideo?.currentTime || 0) - (1 / 30));
+    });
+    this.btnRangeStepFwdFrame?.addEventListener('click', () => {
+      this.seekRangeVideo((this.rangeModalVideo?.currentTime || 0) + (1 / 30));
+    });
+
+    this.btnRangeMarkIn?.addEventListener('click', () => this.markRangeIn());
+    this.btnRangeMarkOut?.addEventListener('click', () => this.markRangeOut());
+
+    this.btnRangeJumpIn?.addEventListener('click', () => this.seekRangeVideo(this.rangeInTime));
+    this.btnRangeJumpOut?.addEventListener('click', () => this.seekRangeVideo(this.rangeOutTime));
+
+    this.btnRangeAddShot?.addEventListener('click', () => this.addRangeShotToStoryboard());
+
+    window.addEventListener('keydown', (e) => {
+      if (!this.shotRangeModal || this.shotRangeModal.classList.contains('hidden')) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        this.btnRangePlayPause?.click();
+      } else if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault();
+        this.markRangeIn();
+      } else if (e.key === 'o' || e.key === 'O') {
+        e.preventDefault();
+        this.markRangeOut();
+      } else if (e.key === '[') {
+        e.preventDefault();
+        this.seekRangeVideo(this.rangeInTime);
+      } else if (e.key === ']') {
+        e.preventDefault();
+        this.seekRangeVideo(this.rangeOutTime);
+      } else if (e.key === ',' || e.key === '<') {
+        e.preventDefault();
+        this.seekRangeVideo((this.rangeModalVideo?.currentTime || 0) - (1 / 30));
+      } else if (e.key === '.' || e.key === '>') {
+        e.preventDefault();
+        this.seekRangeVideo((this.rangeModalVideo?.currentTime || 0) + (1 / 30));
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        this.seekRangeVideo((this.rangeModalVideo?.currentTime || 0) - (e.shiftKey ? 5 : 1));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        this.seekRangeVideo((this.rangeModalVideo?.currentTime || 0) + (e.shiftKey ? 5 : 1));
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this.closeShotRangeModal();
+      }
+    });
+  }
+
 }
 
 document.addEventListener('DOMContentLoaded', () => {

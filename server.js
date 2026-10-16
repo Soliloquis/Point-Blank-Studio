@@ -1168,6 +1168,188 @@ app.post('/api/storyboard/add-custom-shot', (req, res) => {
   res.json({ success: true, shot: newShot, storyboard: project.storyboard });
 });
 
+// Add a range-defined shot with extracted Start & End keyframes (Spatial Previs + True Color)
+app.post('/api/storyboard/add-range', async (req, res) => {
+  try {
+    const project = getProject();
+    project.storyboard = project.storyboard || [];
+    const shotNum = project.storyboard.length + 1;
+    
+    let { startTime = 0, endTime = 4, title, description, cameraMotion } = req.body;
+    startTime = Math.max(0, Number(startTime) || 0);
+    endTime = Math.max(startTime + 0.5, Number(endTime) || (startTime + 4));
+    const duration = +(endTime - startTime).toFixed(2);
+    
+    let keyframeUrl = null;
+    let keyframePath = null;
+    let endKeyframeUrl = null;
+    let endKeyframePath = null;
+    let colorFrameUrl = null;
+    let colorFramePath = null;
+    let endColorFrameUrl = null;
+    let endColorFramePath = null;
+
+    const spatialVideo = project.ingestedVideo?.filePath;
+    const companionVideo = project.companionVideo?.filePath;
+
+    // 1. Extract Start & End Spatial Previs Frames
+    if (spatialVideo && fs.existsSync(spatialVideo)) {
+      const startKf = await extractSingleKeyframe(spatialVideo, KEYFRAMES_DIR, startTime, `${shotNum}_start`);
+      if (startKf) {
+        keyframeUrl = startKf.frameUrl;
+        keyframePath = startKf.framePath;
+      }
+      const endKf = await extractSingleKeyframe(spatialVideo, KEYFRAMES_DIR, Math.max(0, endTime - 0.05), `${shotNum}_end`);
+      if (endKf) {
+        endKeyframeUrl = endKf.frameUrl;
+        endKeyframePath = endKf.framePath;
+      }
+    }
+
+    // 2. Extract Start & End True Color Companion Frames (if available)
+    if (companionVideo && fs.existsSync(companionVideo)) {
+      const startColor = await extractSingleKeyframe(companionVideo, KEYFRAMES_DIR, startTime, `color_${shotNum}_start`);
+      if (startColor) {
+        colorFrameUrl = startColor.frameUrl;
+        colorFramePath = startColor.framePath;
+      }
+      const endColor = await extractSingleKeyframe(companionVideo, KEYFRAMES_DIR, Math.max(0, endTime - 0.05), `color_${shotNum}_end`);
+      if (endColor) {
+        endColorFrameUrl = endColor.frameUrl;
+        endColorFramePath = endColor.framePath;
+      }
+    }
+
+    const newShot = {
+      id: `sb_range_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      shotNumber: shotNum,
+      title: title || `Shot ${shotNum} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`,
+      startTime,
+      endTime,
+      duration,
+      keyframeUrl,
+      keyframePath,
+      endKeyframeUrl,
+      endKeyframePath,
+      colorFrameUrl,
+      colorFramePath,
+      endColorFrameUrl,
+      endColorFramePath,
+      description: description || 'Describe the visual action from start to end frame...',
+      cameraMotion: cameraMotion || 'Dolly Forward',
+      spatialContinuity: {
+        subjectScreenPosition: shotNum % 2 === 0 ? 'Screen-Left' : 'Screen-Right',
+        facingDirection: shotNum % 2 === 0 ? 'Screen-Right' : 'Screen-Left',
+        eyelineMatch: shotNum % 2 === 0 ? 'Looking Screen-Right' : 'Looking Screen-Left',
+        cameraAngle: shotNum === 1 ? 'Wide Establishing 35mm' : (shotNum % 2 === 0 ? 'Medium 50mm' : 'Reverse OTS 85mm'),
+        lightingOrigin: 'Balanced Key Lighting (5600K)',
+        rule180Vector: 'East Axis Continuity'
+      },
+      status: 'pending',
+      approved: false,
+      generatedClip: null
+    };
+
+    project.storyboard.push(newShot);
+    saveProject(project);
+    res.json({ success: true, shot: newShot, storyboard: project.storyboard });
+  } catch (err) {
+    console.error('Add range shot error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Start and End frame range for an existing shot
+app.post('/api/storyboard/:shotId/update-range', async (req, res) => {
+  try {
+    const { shotId } = req.params;
+    const project = getProject();
+    const shot = (project.storyboard || []).find(s => s.id === shotId);
+    if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+    let { startTime, endTime, reExtract = true } = req.body;
+    if (startTime !== undefined) shot.startTime = Math.max(0, Number(startTime));
+    if (endTime !== undefined) shot.endTime = Math.max(shot.startTime + 0.5, Number(endTime));
+    shot.duration = +(shot.endTime - shot.startTime).toFixed(2);
+
+    const spatialVideo = project.ingestedVideo?.filePath;
+    const companionVideo = project.companionVideo?.filePath;
+
+    if (reExtract && spatialVideo && fs.existsSync(spatialVideo)) {
+      const startKf = await extractSingleKeyframe(spatialVideo, KEYFRAMES_DIR, shot.startTime, `${shot.shotNumber}_start`);
+      if (startKf) {
+        shot.keyframeUrl = startKf.frameUrl;
+        shot.keyframePath = startKf.framePath;
+      }
+      const endKf = await extractSingleKeyframe(spatialVideo, KEYFRAMES_DIR, Math.max(0, shot.endTime - 0.05), `${shot.shotNumber}_end`);
+      if (endKf) {
+        shot.endKeyframeUrl = endKf.frameUrl;
+        shot.endKeyframePath = endKf.framePath;
+      }
+    }
+
+    if (reExtract && companionVideo && fs.existsSync(companionVideo)) {
+      const startColor = await extractSingleKeyframe(companionVideo, KEYFRAMES_DIR, shot.startTime, `color_${shot.shotNumber}_start`);
+      if (startColor) {
+        shot.colorFrameUrl = startColor.frameUrl;
+        shot.colorFramePath = startColor.framePath;
+      }
+      const endColor = await extractSingleKeyframe(companionVideo, KEYFRAMES_DIR, Math.max(0, shot.endTime - 0.05), `color_${shot.shotNumber}_end`);
+      if (endColor) {
+        shot.endColorFrameUrl = endColor.frameUrl;
+        shot.endColorFramePath = endColor.framePath;
+      }
+    }
+
+    saveProject(project);
+    res.json({ success: true, shot });
+  } catch (err) {
+    console.error('Update shot range error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Run Targeted Motion & Spatial Delta Analysis on a shot
+app.post('/api/storyboard/:shotId/analyze-motion', async (req, res) => {
+  try {
+    const { shotId } = req.params;
+    const project = getProject();
+    const shot = (project.storyboard || []).find(s => s.id === shotId);
+    if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+    const falApiKey = process.env.FAL_KEY || process.env.FAL_API_KEY || '';
+    const openaiApiKey = process.env.OPENAI_API_KEY || '';
+
+    const deltaResult = await analyzeShotMotionDelta({
+      startFramePath: shot.keyframePath,
+      endFramePath: shot.endKeyframePath,
+      colorStartFramePath: shot.colorFramePath,
+      colorEndFramePath: shot.endColorFramePath,
+      duration: shot.duration,
+      shotNumber: shot.shotNumber,
+      userDescription: project.ingestedVideo?.userDescription || shot.description || '',
+      falApiKey,
+      openaiApiKey
+    });
+
+    if (deltaResult.title) shot.title = deltaResult.title;
+    if (deltaResult.description) shot.description = deltaResult.description;
+    if (deltaResult.cameraMotion) shot.cameraMotion = deltaResult.cameraMotion;
+    if (deltaResult.spatialContinuity) {
+      shot.spatialContinuity = {
+        ...shot.spatialContinuity,
+        ...deltaResult.spatialContinuity
+      };
+    }
+
+    saveProject(project);
+    res.json({ success: true, shot, deltaResult });
+  } catch (err) {
+    console.error('Analyze shot motion error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Update Spatial Continuity Ledger for a specific shot
 app.post('/api/storyboard/:shotId/spatial', (req, res) => {
   try {
@@ -1345,6 +1527,24 @@ app.post('/api/generate-storyboard-clip', async (req, res) => {
       }
     }
 
+    // Dual-Keyframe Interpolation: Bind End Keyframe for Wan FLF2V / Kling image_tail if available
+    if (!tailKeyframePath) {
+      if (shot.styledEndKeyframePath && fs.existsSync(shot.styledEndKeyframePath)) {
+        tailKeyframePath = shot.styledEndKeyframePath;
+      } else if (shot.compositeEndKeyframeUrl) {
+        const fn = path.basename(shot.compositeEndKeyframeUrl);
+        const possiblePath = path.join(KEYFRAMES_DIR, fn);
+        if (fs.existsSync(possiblePath)) tailKeyframePath = possiblePath;
+      } else if (shot.endColorFramePath && fs.existsSync(shot.endColorFramePath)) {
+        tailKeyframePath = shot.endColorFramePath;
+      } else if (shot.endKeyframePath && fs.existsSync(shot.endKeyframePath)) {
+        tailKeyframePath = shot.endKeyframePath;
+      }
+      if (tailKeyframePath) {
+        console.log(`[Animation Generation] Shot #${shot.shotNumber || shotIndex + 1}: Binding End Keyframe for first-to-last-frame video model: ${tailKeyframePath}`);
+      }
+    }
+
     const allRefs = getAllReferences(project);
     const assignedRefs = (shot.assignedReferences || [])
       .map(id => allRefs.find(r => r.id === id))
@@ -1472,23 +1672,27 @@ app.post('/api/storyboard/:shotId/chain-tail-frame', async (req, res) => {
 app.post('/api/storyboard/:shotId/restyle-keyframe', async (req, res) => {
   try {
     const { shotId } = req.params;
+    const targetFrame = req.body.targetFrame || 'start'; // 'start' | 'end'
+    const isEnd = targetFrame === 'end';
     const project = getProject();
     const shot = (project.storyboard || []).find(s => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Storyboard shot not found' });
 
-    let kfPath = shot.keyframePath;
-    if (!kfPath && shot.keyframeUrl) {
-      const fn = path.basename(shot.keyframeUrl);
+    let kfPath = isEnd ? (shot.endKeyframePath || shot.keyframePath) : shot.keyframePath;
+    const kfUrl = isEnd ? (shot.endKeyframeUrl || shot.keyframeUrl) : shot.keyframeUrl;
+    if (!kfPath && kfUrl) {
+      const fn = path.basename(kfUrl);
       const possible = path.join(KEYFRAMES_DIR, fn);
       if (fs.existsSync(possible)) kfPath = possible;
     }
     if (!kfPath) {
-      return res.status(400).json({ error: 'No keyframe image available for this shot' });
+      return res.status(400).json({ error: `No keyframe image available for this shot (${targetFrame} frame)` });
     }
 
-    let colorFramePath = shot.colorFramePath || null;
-    if (!colorFramePath && shot.colorFrameUrl) {
-      const fn = path.basename(shot.colorFrameUrl);
+    let colorFramePath = isEnd ? (shot.endColorFramePath || null) : (shot.colorFramePath || null);
+    const colorUrl = isEnd ? (shot.endColorFrameUrl || null) : (shot.colorFrameUrl || null);
+    if (!colorFramePath && colorUrl) {
+      const fn = path.basename(colorUrl);
       const possible = path.join(KEYFRAMES_DIR, fn);
       if (fs.existsSync(possible)) colorFramePath = possible;
     }
@@ -1560,20 +1764,29 @@ app.post('/api/storyboard/:shotId/restyle-keyframe', async (req, res) => {
       modelEndpoint: req.body.restyleModel || appConfig.falRestyleModel || 'fal-ai/nano-banana-pro/edit'
     });
 
-    shot.styledKeyframeUrl = result.imageUrl;
-    shot.styledKeyframePath = result.imagePath;
-    shot.styledAt = Date.now();
-    shot.isPlayblastMode = isPlayblastMode;
-    shot.restyleStrength = strength;
-    shot.restyleMethod = result.method || 'flux';
-    if (result.stage1ImageUrl) shot.stage1ImageUrl = result.stage1ImageUrl;
-    if (result.stage2ImageUrl) shot.stage2ImageUrl = result.stage2ImageUrl;
-    if (result.maskImageUrl) shot.maskImageUrl = result.maskImageUrl;
+    if (isEnd) {
+      shot.styledEndKeyframeUrl = result.imageUrl;
+      shot.styledEndKeyframePath = result.imagePath;
+      shot.styledEndAt = Date.now();
+      shot.endRestyleStrength = strength;
+      shot.endRestyleMethod = result.method || 'flux';
+    } else {
+      shot.styledKeyframeUrl = result.imageUrl;
+      shot.styledKeyframePath = result.imagePath;
+      shot.styledAt = Date.now();
+      shot.isPlayblastMode = isPlayblastMode;
+      shot.restyleStrength = strength;
+      shot.restyleMethod = result.method || 'flux';
+      if (result.stage1ImageUrl) shot.stage1ImageUrl = result.stage1ImageUrl;
+      if (result.stage2ImageUrl) shot.stage2ImageUrl = result.stage2ImageUrl;
+      if (result.maskImageUrl) shot.maskImageUrl = result.maskImageUrl;
+    }
     saveProject(project);
 
     res.json({
       success: true,
       shot,
+      targetFrame,
       styledKeyframeUrl: result.imageUrl,
       method: result.method,
       isMultiPass: Boolean(result.isMultiPass)
@@ -1592,6 +1805,8 @@ app.post('/api/storyboard/:shotId/restyle-keyframe', async (req, res) => {
 app.post('/api/storyboard/:shotId/layers/extract', async (req, res) => {
   try {
     const { shotId } = req.params;
+    const targetFrame = req.body?.targetFrame || req.query?.targetFrame || 'start';
+    const isEnd = targetFrame === 'end';
     const project = getProject();
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
@@ -1600,15 +1815,21 @@ app.post('/api/storyboard/:shotId/layers/extract', async (req, res) => {
       shot,
       project,
       outputDir: KEYFRAMES_DIR,
-      falService
+      falService,
+      targetFrame
     });
 
-    shot.layers = result.layers;
+    if (isEnd) {
+      shot.endLayers = result.layers;
+    } else {
+      shot.layers = result.layers;
+    }
     saveProject(project);
 
     res.json({
       success: true,
       shotId,
+      targetFrame,
       layers: result.layers,
       canvasWidth: result.canvasWidth,
       canvasHeight: result.canvasHeight
@@ -1627,7 +1848,7 @@ app.post('/api/storyboard/:shotId/layers/:layerId/regenerate', async (req, res) 
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-    const layer = (shot.layers || []).find((l) => l.id === layerId);
+    const { layer, list: layerList, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
     if (!layer) return res.status(404).json({ error: 'Layer not found' });
 
     const allRefs = [];
@@ -1680,7 +1901,7 @@ app.post('/api/storyboard/:shotId/layers/:layerId/assign-asset', (req, res) => {
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-    const layer = (shot.layers || []).find((l) => l.id === layerId);
+    const { layer, list: layerList, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
     if (!layer) return res.status(404).json({ error: 'Layer not found' });
 
     const allRefs = [];
@@ -1720,7 +1941,7 @@ app.post('/api/storyboard/:shotId/layers/:layerId/apply-sprite', async (req, res
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-    const layer = (shot.layers || []).find((l) => l.id === layerId);
+    const { layer, list: layerList, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
     if (!layer) return res.status(404).json({ error: 'Layer not found' });
 
     const allRefs = [];
@@ -1808,7 +2029,7 @@ app.post('/api/storyboard/:shotId/layers/:layerId/duplicate', (req, res) => {
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
     if (!Array.isArray(shot.layers)) shot.layers = [];
-    const layer = shot.layers.find(l => l.id === layerId);
+    const { layer, list: layerList, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
     if (!layer) return res.status(404).json({ error: 'Layer not found' });
     if (layer.isBackground) return res.status(400).json({ error: 'Cannot duplicate background layer' });
 
@@ -1871,7 +2092,7 @@ app.patch('/api/storyboard/:shotId/layers/:layerId', (req, res) => {
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
     if (!Array.isArray(shot.layers)) shot.layers = [];
-    const layer = shot.layers.find(l => l.id === layerId);
+    const { layer, list: layerList, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
     if (!layer) return res.status(404).json({ error: 'Layer not found' });
 
     if (typeof assetName === 'string' && !layer.isBackground) {
@@ -1940,7 +2161,8 @@ app.post('/api/storyboard/:shotId/layers/reorder', (req, res) => {
 app.post('/api/storyboard/:shotId/layers/bake', async (req, res) => {
   try {
     const { shotId } = req.params;
-    const { compositeBase64, harmonyStrength, layers } = req.body;
+    const { compositeBase64, harmonyStrength, layers, targetFrame = 'start' } = req.body;
+    const isEnd = targetFrame === 'end';
     if (!compositeBase64) return res.status(400).json({ error: 'Missing compositeBase64' });
 
     const project = getProject();
@@ -1948,7 +2170,11 @@ app.post('/api/storyboard/:shotId/layers/bake', async (req, res) => {
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
     if (Array.isArray(layers)) {
-      shot.layers = layers;
+      if (isEnd) {
+        shot.endLayers = layers;
+      } else {
+        shot.layers = layers;
+      }
     }
 
     let styleImagePath = null;
@@ -1968,7 +2194,8 @@ app.post('/api/storyboard/:shotId/layers/bake', async (req, res) => {
       styleImagePath,
       model: req.body.harmonyModel || appConfig.harmonizeModel || 'fal-ai/nano-banana-pro/edit',
       outputDir: KEYFRAMES_DIR,
-      falService
+      falService,
+      targetFrame
     });
 
     saveProject(project);
@@ -1976,6 +2203,7 @@ app.post('/api/storyboard/:shotId/layers/bake', async (req, res) => {
     res.json({
       success: true,
       shot: result.shot,
+      targetFrame,
       compositeKeyframeUrl: result.compositeKeyframeUrl,
       styledKeyframeUrl: result.styledKeyframeUrl,
       method: result.method

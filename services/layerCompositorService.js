@@ -118,33 +118,68 @@ async function extractShotLayers({ shot, project, outputDir, falService }) {
   if (Array.isArray(project.visualReference?.assets)) {
     allRefs.push(...project.visualReference.assets);
   }
-  const assignedRefIds = shot.assignedReferences || [];
-  const assignedAssets = allRefs.filter(a => assignedRefIds.includes(a.id) && a.colorKey);
+  // Robust Candidate Asset Discovery for Color Keying
+  const keyedRefs = allRefs.filter(a => a && a.colorKey && typeof a.colorKey === 'string' && a.colorKey.trim().length > 0);
+  const assignedRefIds = Array.isArray(shot.assignedReferences) ? shot.assignedReferences : [];
+  const shotText = `${shot.title || ''} ${shot.description || ''}`.toLowerCase();
 
-  console.log(`[LayerCompositor] Decomposing Shot ${shot.shotNumber || shot.id} into layers (${assignedAssets.length} keyed assets)...`);
+  const candidateAssets = [];
+  const seenColorKeys = new Set();
+  const seenAssetIds = new Set();
+
+  function addCandidate(asset) {
+    if (!asset || seenAssetIds.has(asset.id)) return;
+    const normKey = asset.colorKey.toLowerCase().trim();
+    if (seenColorKeys.has(normKey)) return;
+    candidateAssets.push(asset);
+    seenAssetIds.add(asset.id);
+    seenColorKeys.add(normKey);
+  }
+
+  // Priority 1: Explicitly assigned references in shot.assignedReferences
+  keyedRefs.filter(a => assignedRefIds.includes(a.id)).forEach(addCandidate);
+
+  // Priority 2: References mentioned in shot title or description by name or tag
+  keyedRefs.filter(a => {
+    const nameMatch = a.name && shotText.includes(a.name.toLowerCase());
+    const tagMatch = a.tag && shotText.includes(a.tag.toLowerCase());
+    return nameMatch || tagMatch;
+  }).forEach(addCandidate);
+
+  // Priority 3: All remaining keyed references in the project (proactively scanned in Spatial Previs)
+  keyedRefs.forEach(addCandidate);
+
+  console.log(`[LayerCompositor] Decomposing Shot ${shot.shotNumber || shot.id} (${targetFrame.toUpperCase()} frame) scanning ${candidateAssets.length} candidate keyed assets...`);
 
   const layers = [];
   const unionMaskPaths = [];
   const ts = Date.now();
 
   // 1. Extract each keyed asset as an isolated transparent PNG layer
-  for (let i = 0; i < assignedAssets.length; i++) {
-    const asset = assignedAssets[i];
+  for (let i = 0; i < candidateAssets.length; i++) {
+    const asset = candidateAssets[i];
     const colorKey = asset.colorKey;
-    const maskFilename = `mask_layer_${shot.id}_${asset.id}_${ts}.png`;
+    const maskFilename = `mask_layer_${shot.id}_${targetFrame}_${asset.id}_${ts}.png`;
     const maskPath = path.join(outputDir, maskFilename);
 
     // Generate feathered mask for this specific color key
     const maskResult = await generateColorKeyMask(spatialPath, [colorKey], maskPath, { dilation: 6, feather: 3 });
 
     if (maskResult.hasMask && maskResult.pixelCount > 40) {
+      console.log(`[LayerCompositor] Successfully extracted asset "${asset.name}" (${colorKey}, ${maskResult.pixelCount} px) into ${targetFrame.toUpperCase()} layer`);
       unionMaskPaths.push(maskPath);
+
+      // Automatically register visible keyed asset on shot.assignedReferences
+      if (!Array.isArray(shot.assignedReferences)) shot.assignedReferences = [];
+      if (!shot.assignedReferences.includes(asset.id)) {
+        shot.assignedReferences.push(asset.id);
+      }
 
       // Compute bounding box and corner quad
       const bounds = await computeMaskBoundsAndQuad(maskPath);
 
       // Extract transparent RGBA layer from color pass using FFmpeg alphamerge
-      const layerFilename = `layer_${shot.id}_${asset.id}_${ts}.png`;
+      const layerFilename = `layer_${shot.id}_${targetFrame}_${asset.id}_${ts}.png`;
       const layerPath = path.join(outputDir, layerFilename);
 
       await runFfmpeg([
@@ -156,7 +191,7 @@ async function extractShotLayers({ shot, project, outputDir, falService }) {
       ]);
 
       layers.push({
-        id: `layer_${asset.id}_${ts}`,
+        id: `layer_${asset.id}_${targetFrame}_${ts}`,
         assetId: asset.id,
         assetName: asset.name,
         category: asset.category || 'props',
