@@ -403,11 +403,19 @@ class StudioApp {
     this.kfStyleText = document.getElementById('kf-style-text');
     this.btnKfReplaceSource = document.getElementById('btn-kf-replace-source');
     this.btnKfReplaceColor = document.getElementById('btn-kf-replace-color');
+    this.btnKfUploadRestyle = document.getElementById('btn-kf-upload-restyle');
+    this.btnKfChainPrevRestyle = document.getElementById('btn-kf-chain-prev-restyle');
+    this.btnLightboxUploadRestyle = document.getElementById('btn-lightbox-upload-restyle');
+    this.btnLightboxChainPrevRestyle = document.getElementById('btn-lightbox-chain-prev-restyle');
+    this.btnCompareUploadRestyle = document.getElementById('btn-compare-upload-restyle');
     this.btnKfTriggerRestyle = document.getElementById('btn-kf-trigger-restyle');
 
     this.companionVideoInput = document.getElementById('companion-video-input');
     this.uploadColorFrameInput = document.getElementById('upload-color-frame-input');
+    this.uploadRestyleFrameInput = document.getElementById('upload-restyle-frame-input');
     this.activeColorShotId = null;
+    this.activeRestyleShotId = null;
+    this.activeRestyleTargetFrame = 'start';
 
     this.activeLightboxShotIndex = 0;
     this.activeLightboxTarget = 'source'; // 'source', 'color', or 'regened'
@@ -1255,6 +1263,51 @@ class StudioApp {
 
     this.companionVideoInput?.addEventListener('change', () => this.handleCompanionVideoUpload());
     this.uploadColorFrameInput?.addEventListener('change', () => this.handleUploadColorFrame());
+    this.uploadRestyleFrameInput?.addEventListener('change', () => this.handleUploadRestyleFrame());
+
+    this.btnKfUploadRestyle?.addEventListener('click', () => {
+      const shots = this.project.storyboard || [];
+      const shot = shots[this.activeLightboxShotIndex];
+      if (shot && this.uploadRestyleFrameInput) {
+        this.activeRestyleShotId = shot.id;
+        this.activeRestyleTargetFrame = this.activeLightboxTargetFrame || 'start';
+        this.uploadRestyleFrameInput.click();
+      }
+    });
+
+    this.btnKfChainPrevRestyle?.addEventListener('click', async () => {
+      const shots = this.project.storyboard || [];
+      const shot = shots[this.activeLightboxShotIndex];
+      if (!shot) return;
+      await this.chainPrevRestyle(shot.id, this.activeLightboxTargetFrame || 'start');
+    });
+
+    this.btnLightboxUploadRestyle?.addEventListener('click', () => {
+      const shots = this.project.storyboard || [];
+      const shot = shots[this.activeLightboxShotIndex];
+      if (shot && this.uploadRestyleFrameInput) {
+        this.activeRestyleShotId = shot.id;
+        this.activeRestyleTargetFrame = this.activeLightboxTargetFrame || 'start';
+        this.uploadRestyleFrameInput.click();
+      }
+    });
+
+    this.btnLightboxChainPrevRestyle?.addEventListener('click', async () => {
+      const shots = this.project.storyboard || [];
+      const shot = shots[this.activeLightboxShotIndex];
+      if (!shot) return;
+      await this.chainPrevRestyle(shot.id, this.activeLightboxTargetFrame || 'start');
+    });
+
+    this.btnCompareUploadRestyle?.addEventListener('click', () => {
+      const shots = this.project.storyboard || [];
+      const shot = shots[this.activeLightboxShotIndex];
+      if (shot && this.uploadRestyleFrameInput) {
+        this.activeRestyleShotId = shot.id;
+        this.activeRestyleTargetFrame = this.activeLightboxTargetFrame || 'start';
+        this.uploadRestyleFrameInput.click();
+      }
+    });
 
     // Lightbox Global Key Shortcuts
     window.addEventListener('keydown', (e) => {
@@ -2173,6 +2226,105 @@ class StudioApp {
     }
   }
 
+  async uploadRestyleImageFile(shotId, targetFrame, file) {
+    if (!file || !shotId) return;
+
+    const formData = new FormData();
+    formData.append('restyleFrame', file);
+    formData.append('targetFrame', targetFrame || 'start');
+
+    try {
+      const res = await fetch(`/api/storyboard/${shotId}/upload-restyle-frame`, {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg = `Server returned ${res.status}`;
+        try {
+          const parsed = JSON.parse(text);
+          errMsg = parsed.error || errMsg;
+        } catch (_) {
+          if (res.status === 404) {
+            errMsg = 'Route not found (404). Please restart your PointBlank node server to load the new backend routes.';
+          } else {
+            errMsg = text.replace(/<[^>]*>/g, '').trim() || errMsg;
+          }
+        }
+        throw new Error(errMsg);
+      }
+      const data = await res.json();
+      if (data.success && data.shot) {
+        const shotIndex = (this.project.storyboard || []).findIndex((s) => s.id === shotId);
+        if (shotIndex !== -1) {
+          Object.assign(this.project.storyboard[shotIndex], data.shot);
+          this.renderStoryboard();
+          this.saveProject();
+          if (this.keyframeLightboxModal && !this.keyframeLightboxModal.classList.contains('hidden')) {
+            this.updateKeyframeLightboxUi();
+          }
+        }
+      } else {
+        throw new Error(data.error || 'Failed to upload restyled keyframe');
+      }
+    } catch (err) {
+      alert('Restyle image upload error: ' + err.message);
+    }
+  }
+
+  async handleUploadRestyleFrame() {
+    const file = this.uploadRestyleFrameInput?.files?.[0];
+    if (!file || !this.activeRestyleShotId) return;
+
+    try {
+      await this.uploadRestyleImageFile(this.activeRestyleShotId, this.activeRestyleTargetFrame || 'start', file);
+    } finally {
+      if (this.uploadRestyleFrameInput) this.uploadRestyleFrameInput.value = '';
+      this.activeRestyleShotId = null;
+    }
+  }
+
+  async chainPrevRestyle(shotId, targetFrame = 'start') {
+    try {
+      const res = await fetch(`/api/storyboard/${shotId}/chain-prev-restyle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetFrame })
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg = `Server returned ${res.status}`;
+        try {
+          const parsed = JSON.parse(text);
+          errMsg = parsed.error || errMsg;
+        } catch (_) {
+          if (res.status === 404) {
+            errMsg = 'Route not found (404). Please restart your PointBlank node server to load the new backend routes.';
+          } else {
+            errMsg = text.replace(/<[^>]*>/g, '').trim() || errMsg;
+          }
+        }
+        throw new Error(errMsg);
+      }
+      const data = await res.json();
+      if (data.success && data.shot) {
+        const shotIndex = (this.project.storyboard || []).findIndex((s) => s.id === shotId);
+        if (shotIndex !== -1) {
+          Object.assign(this.project.storyboard[shotIndex], data.shot);
+          this.renderStoryboard();
+          this.saveProject();
+          if (this.keyframeLightboxModal && !this.keyframeLightboxModal.classList.contains('hidden')) {
+            this.updateKeyframeLightboxUi();
+          }
+        }
+      } else {
+        throw new Error(data.error || 'Failed to chain previous shot End Frame');
+      }
+    } catch (err) {
+      alert('Chain previous end frame error: ' + err.message);
+    }
+  }
+
   async handleCompanionVideoUpload() {
     const file = this.companionVideoInput?.files?.[0];
     if (!file) return;
@@ -2445,10 +2597,19 @@ class StudioApp {
             ${restyleUrl ? `
               <img src="${restyleUrl}" alt="${label} Restyled Keyframe">
               <span class="thumb-zoom-badge" title="Click to view large">🔍 View</span>
+              <div class="thumb-hover-actions">
+                ${(!isEnd && index > 0) ? `<button type="button" class="btn-xs btn-secondary btn-chain-restyle" data-action="chain-prev-restyle" data-target-frame="${targetFrame}" title="Chain End Frame of Shot #${index}">🔗 Prev End</button>` : ''}
+                <button type="button" class="btn-xs btn-secondary btn-upload-restyle" data-action="upload-restyle" data-target-frame="${targetFrame}" title="Upload custom image for ${label} Restyle">📷 Replace</button>
+                <button type="button" class="btn-xs btn-danger btn-clear-restyle" data-action="clear-restyle" data-target-frame="${targetFrame}" title="Clear restyled keyframe">✕</button>
+              </div>
             ` : `
               <div class="empty-stage-content">
                 <span style="font-size:1.1rem;">✨</span>
                 <span style="font-size:0.62rem; color:var(--text-dim);">No Restyle</span>
+                <div class="empty-stage-btn-group">
+                  ${(!isEnd && index > 0) ? `<button type="button" class="btn-xs btn-secondary btn-chain-restyle" data-action="chain-prev-restyle" data-target-frame="${targetFrame}" title="Use End Frame of Shot #${index}">🔗 Prev End</button>` : ''}
+                  <button type="button" class="btn-xs btn-secondary btn-upload-restyle" data-action="upload-restyle" data-target-frame="${targetFrame}" title="Upload custom image for ${label}">📤 Upload</button>
+                </div>
               </div>
             `}
           </div>
@@ -2746,20 +2907,50 @@ class StudioApp {
       }
 
       // Replace Keyframe Image
-      card.querySelectorAll('[data-action="replace-kf"]').forEach(btn => {
+      // Upload / Replace Restyled Keyframe
+      card.querySelectorAll('[data-action="upload-restyle"]').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          this.activeReplacingShotId = shot.id;
-          this.replaceKeyframeInput.click();
+          this.activeRestyleShotId = shot.id;
+          this.activeRestyleTargetFrame = btn.dataset.targetFrame || 'start';
+          this.uploadRestyleFrameInput?.click();
         });
       });
 
-      // Upload / Replace True Color Reference Frame
-      card.querySelectorAll('[data-action="upload-color"]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+      // Clear Restyled Keyframe
+      card.querySelectorAll('[data-action="clear-restyle"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          this.activeColorShotId = shot.id;
-          this.uploadColorFrameInput?.click();
+          const targetFrame = btn.dataset.targetFrame || 'start';
+          if (!confirm(`Clear restyled ${targetFrame.toUpperCase()} frame for Shot #${shot.shotNumber || index + 1}?`)) return;
+          try {
+            const res = await fetch(`/api/storyboard/${shot.id}/restyle-frame?targetFrame=${targetFrame}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success && data.shot) {
+              Object.assign(shot, data.shot);
+              this.renderStoryboard();
+              this.saveProject();
+            }
+          } catch (err) {
+            console.warn('Failed to delete restyle frame:', err);
+          }
+        });
+      });
+
+      // Chain / Use Previous Shot End Frame as Restyle
+      card.querySelectorAll('[data-action="chain-prev-restyle"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const targetFrame = btn.dataset.targetFrame || 'start';
+          btn.disabled = true;
+          const origHtml = btn.innerHTML;
+          btn.innerHTML = `<span class="btn-spinner"></span>`;
+          try {
+            await this.chainPrevRestyle(shot.id, targetFrame);
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+          }
         });
       });
 
@@ -2921,7 +3112,35 @@ class StudioApp {
             const restyleUrl = isEnd ? shot.styledEndKeyframeUrl : shot.styledKeyframeUrl;
             if (restyleUrl) {
               this.openKeyframeReviewModal(shot, 'restyle', 'single', targetFrame);
+            } else {
+              this.activeRestyleShotId = shot.id;
+              this.activeRestyleTargetFrame = targetFrame;
+              this.uploadRestyleFrameInput?.click();
             }
+          }
+        });
+      });
+
+      // Drag and drop image upload for Restyle thumb boxes
+      card.querySelectorAll('.visual-thumb-box[data-stage="restyle"]').forEach(box => {
+        const targetFrame = box.dataset.targetFrame || 'start';
+        box.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          box.classList.add('drag-over-slot');
+        });
+        box.addEventListener('dragleave', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          box.classList.remove('drag-over-slot');
+        });
+        box.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          box.classList.remove('drag-over-slot');
+          const file = e.dataTransfer?.files?.[0];
+          if (file && file.type.startsWith('image/')) {
+            await this.uploadRestyleImageFile(shot.id, targetFrame, file);
           }
         });
       });
@@ -5859,7 +6078,7 @@ class StudioApp {
         badgeBg = 'rgba(16, 185, 129, 0.2)';
         badgeColor = '#34d399';
         badgeBorder = 'rgba(16, 185, 129, 0.4)';
-        emptyMsg = 'No restyled keyframe exists yet for this shot. Bake with harmonization in the Compositor!';
+        emptyMsg = 'No restyled keyframe exists yet for this shot. Upload a custom image or bake in the Compositor!';
       } else {
         imgUrl = (this.activeLightboxTargetFrame === 'end') ? (shot.endKeyframeUrl || shot.keyframeUrl) : shot.keyframeUrl;
         stageName = '1. Spatial Previs Frame (3D Playblast / Proxy Matting)';
@@ -5897,6 +6116,17 @@ class StudioApp {
         if (this.kfSingleEmptyText) this.kfSingleEmptyText.textContent = emptyMsg;
         if (this.kfOpenRaw) this.kfOpenRaw.style.display = 'none';
         if (this.kfMetaRes) this.kfMetaRes.textContent = 'No Image';
+      }
+
+      const isRestyleStage = (this.activeLightboxTarget === 'restyle' || this.activeLightboxTarget === 'regened');
+      if (this.btnLightboxUploadRestyle) {
+        this.btnLightboxUploadRestyle.classList.toggle('hidden', !isRestyleStage);
+      }
+      if (this.btnLightboxChainPrevRestyle) {
+        this.btnLightboxChainPrevRestyle.classList.toggle('hidden', !isRestyleStage || this.activeLightboxShotIndex <= 0);
+      }
+      if (this.btnKfChainPrevRestyle) {
+        this.btnKfChainPrevRestyle.style.display = (this.activeLightboxShotIndex > 0) ? 'inline-flex' : 'none';
       }
     } else {
       // Tri-Split Comparison Viewport (Spatial vs True Color vs Regened)
@@ -5949,15 +6179,15 @@ class StudioApp {
   // --- Master Video Export Modal (FFmpeg) ---
   openExportModal() {
     const tl = this.project.timeline || [];
-    if (tl.length === 0) {
-      alert('Please add at least one clip to the timeline before exporting.');
+    const visualClips = this.getVisualTimelineClips();
+    if (visualClips.length === 0) {
+      alert('Please add at least one visual clip (video or animatic) to the timeline before exporting.');
       return;
     }
 
-    let total = 0;
-    tl.forEach((c) => total += Math.max(0.1, (c.trimEnd || c.duration) - (c.trimStart || 0)));
+    const total = this.getSequenceTotalDuration();
 
-    this.modalClipCount.textContent = tl.length;
+    this.modalClipCount.textContent = visualClips.length;
     this.modalTotalDuration.textContent = this.formatTime(total);
 
     this.exportProgressBox.classList.add('hidden');
@@ -5972,11 +6202,15 @@ class StudioApp {
 
   async startStitchExport() {
     const tl = this.project.timeline || [];
-    if (tl.length === 0) return;
+    const visualClips = this.getVisualTimelineClips();
+    if (visualClips.length === 0) {
+      alert('Please add at least one visual clip (video or animatic) to the timeline before exporting.');
+      return;
+    }
 
     this.exportProgressBox.classList.remove('hidden');
     this.startStitchExportBtn.disabled = true;
-    this.exportProgressText.textContent = 'Calling local FFmpeg: trimming, conforming resolution, and stitching clips...';
+    this.exportProgressText.textContent = 'Calling local FFmpeg: conforming resolution, stitching video, and mixing audio tracks...';
 
     try {
       const res = await fetch('/api/export-video', {

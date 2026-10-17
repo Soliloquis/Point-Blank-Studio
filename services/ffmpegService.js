@@ -155,10 +155,42 @@ async function getVideoDuration(filePath) {
   }
 }
 
-// Stitch timeline clips together into a long-format video with transitions (Cut, Dissolve, Fade to Black, Wipe)
-async function stitchTimelineClips({ clips, transitions = [], outputPath, audioPath, targetResolution = '1280x720' }) {
+// Helper to inspect if media file has video and/or audio streams
+async function inspectMediaStreams(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return { hasVideo: false, hasAudio: false, duration: 5 };
+  try {
+    const proc = spawn(ffmpegBinary, ['-i', filePath], { windowsHide: true });
+    let output = '';
+    return new Promise((resolve) => {
+      proc.stderr.on('data', (d) => { output += d.toString(); });
+      proc.on('close', () => {
+        const hasVideo = /Stream.*Video:/i.test(output);
+        const hasAudio = /Stream.*Audio:/i.test(output);
+        let duration = 5;
+        const match = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+        if (match) {
+          duration = parseFloat(match[1]) * 3600 + parseFloat(match[2]) * 60 + parseFloat(match[3]);
+        }
+        resolve({ hasVideo, hasAudio, duration });
+      });
+      proc.on('error', () => resolve({ hasVideo: false, hasAudio: false, duration: 5 }));
+    });
+  } catch (e) {
+    return { hasVideo: false, hasAudio: false, duration: 5 };
+  }
+}
+
+// Stitch timeline clips together into a long-format video with transitions and multi-track audio
+async function stitchTimelineClips({
+  clips,
+  audioClips = [],
+  transitions = [],
+  outputPath,
+  audioPath,
+  targetResolution = '1280x720'
+}) {
   if (!clips || clips.length === 0) {
-    throw new Error('No clips provided to stitch');
+    throw new Error('No video or visual clips provided to stitch');
   }
 
   const tempDir = path.join(path.dirname(outputPath), `temp_${Date.now()}`);
@@ -168,15 +200,17 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
     const normalizedClips = [];
     const clipDurations = [];
 
-    // Pre-process and normalize each clip with uniform framerate, resolution, and stereo audio
+    // Pre-process and normalize each visual clip with uniform framerate, resolution, and stereo audio
     for (let i = 0; i < clips.length; i++) {
       const clip = clips[i];
       const normPath = path.join(tempDir, `norm_${i}.mp4`);
-      
+
       const trimStart = Number(clip.trimStart || 0);
       const hasTrimEnd = clip.trimEnd !== undefined && clip.trimEnd !== null && Number(clip.trimEnd) > 0;
-      
       const isImage = Boolean(clip.isAnimatic || /\.(png|jpg|jpeg|webp)$/i.test(clip.filePath || clip.url || ''));
+
+      const streamInfo = isImage ? { hasVideo: false, hasAudio: false } : await inspectMediaStreams(clip.filePath);
+
       const args = ['-y'];
       if (isImage) {
         args.push('-loop', '1');
@@ -188,16 +222,24 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
 
       let customAudioPath = clip.audioPath;
       if (!customAudioPath && Array.isArray(clip.audioTracks) && clip.audioTracks.length > 0) {
-        customAudioPath = clip.audioTracks[0].filePath;
+        customAudioPath = clip.audioTracks[0].filePath || clip.audioTracks[0].url;
       }
-
-      const hasCustomAudio = customAudioPath && fs.existsSync(customAudioPath);
-      if (hasCustomAudio) {
-        args.push('-i', customAudioPath);
-      } else if (isImage) {
-        // Provide silent audio for image clip so all clips have audio stream
-        args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100');
+      if (customAudioPath && !fs.existsSync(customAudioPath)) {
+        const fn = path.basename(customAudioPath);
+        const possibleDirs = [
+          path.join(path.dirname(outputPath), '..', 'audio'),
+          path.join(path.dirname(outputPath), '..', 'uploads'),
+          path.join(path.dirname(outputPath), '..', 'clips')
+        ];
+        for (const dir of possibleDirs) {
+          const p = path.join(dir, fn);
+          if (fs.existsSync(p)) {
+            customAudioPath = p;
+            break;
+          }
+        }
       }
+      const hasCustomAudio = Boolean(customAudioPath && fs.existsSync(customAudioPath));
 
       const trimDuration = hasTrimEnd ? (Number(clip.trimEnd) - trimStart) : (Number(clip.duration) || 4);
       if (trimDuration > 0) {
@@ -207,8 +249,9 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
       const [w, h] = targetResolution.split('x');
       const vf = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,format=yuv420p`;
 
-      if (hasCustomAudio || isImage) {
+      if (hasCustomAudio) {
         args.push(
+          '-i', customAudioPath,
           '-vf', vf,
           '-map', '0:v:0',
           '-map', '1:a:0',
@@ -221,15 +264,33 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
           '-shortest',
           normPath
         );
-      } else {
+      } else if (streamInfo.hasAudio) {
         args.push(
           '-vf', vf,
+          '-map', '0:v:0',
+          '-map', '0:a:0',
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-ar', '44100',
+          '-ac', '2',
+          normPath
+        );
+      } else {
+        // Video has no audio or is still image: synthesize silence so all clips have consistent video & stereo audio streams
+        args.push(
+          '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+          '-vf', vf,
+          '-map', '0:v:0',
+          '-map', '1:a:0',
           '-c:v', 'libx264',
           '-preset', 'veryfast',
           '-c:a', 'aac',
           '-b:a', '128k',
           '-ar', '44100',
           '-ac', '2',
+          '-shortest',
           normPath
         );
       }
@@ -242,7 +303,7 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
       clipDurations.push(dur || 4);
     }
 
-    const stitchedTemp = path.join(tempDir, 'stitched_noaudio.mp4');
+    const stitchedTemp = path.join(tempDir, 'stitched_visual.mp4');
 
     // Check if there are any non-cut transitions
     const hasTransitions = transitions.some(t => t && t.type && t.type !== 'cut' && Number(t.duration || 0) > 0);
@@ -260,7 +321,6 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
       let lastVideoLabel = '0:v';
       let lastAudioLabel = '0:a';
 
-      // Map transition type to FFmpeg xfade transition name
       const xfadeTypeMap = {
         'dissolve': 'dissolve',
         'crossfade': 'dissolve',
@@ -276,16 +336,14 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
       for (let i = 0; i < normalizedClips.length - 1; i++) {
         const nextClipDuration = clipDurations[i + 1];
         const trans = transitions[i] || { type: 'cut', duration: 0 };
-        
+
         let transType = xfadeTypeMap[trans.type] || 'fade';
         let transDur = Number(trans.duration || 0.8);
-        
-        // Safety cap duration to at most half of the shorter clip
+
         const maxAllowed = Math.min(accumulatedDuration, nextClipDuration) / 2.1;
         if (transDur > maxAllowed) transDur = Math.max(0.2, Math.floor(maxAllowed * 10) / 10);
 
         if (trans.type === 'cut' || transDur <= 0.05) {
-          // Hard cut simulation via minimal 0.02s crossfade to prevent discontinuities
           transType = 'fade';
           transDur = 0.02;
         }
@@ -302,7 +360,6 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
         lastAudioLabel = nextAudioLabel;
       }
 
-      // Strip trailing semicolons
       const filterComplex = `${videoFilterGraph} ${audioFilterGraph}`.trim().replace(/;$/, '');
 
       const xfadeArgs = [
@@ -313,7 +370,7 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-c:a', 'aac',
-        '-b:a', '128k',
+        '-b:a', '192k',
         stitchedTemp
       ];
 
@@ -321,27 +378,94 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
         await runFfmpeg(xfadeArgs);
       } catch (err) {
         console.warn('XFade transition filter failed, falling back to concat:', err.message);
-        // Fallback to concat demuxer if xfade fails
         await runConcatFallback(normalizedClips, tempDir, stitchedTemp);
       }
     } else {
-      // Direct concat demuxer (when all cuts or single clip)
       await runConcatFallback(normalizedClips, tempDir, stitchedTemp);
     }
 
+    // Process audio track stems (e.g. A1, A2) and/or background audio
+    const validAudioItems = [];
+    if (Array.isArray(audioClips)) {
+      for (const ac of audioClips) {
+        let aPath = ac.filePath;
+        if (!aPath || !fs.existsSync(aPath)) {
+          const fn = path.basename(ac.filePath || ac.url || ac.filename || '');
+          const possibleDirs = [
+            path.join(path.dirname(outputPath), '..', 'audio'),
+            path.join(path.dirname(outputPath), '..', 'uploads'),
+            path.join(path.dirname(outputPath), '..', 'clips')
+          ];
+          for (const dir of possibleDirs) {
+            const p = path.join(dir, fn);
+            if (fs.existsSync(p)) {
+              aPath = p;
+              break;
+            }
+          }
+        }
+        if (aPath && fs.existsSync(aPath)) {
+          validAudioItems.push({
+            ...ac,
+            filePath: aPath
+          });
+        }
+      }
+    }
+
     if (audioPath && fs.existsSync(audioPath)) {
-      const audioArgs = [
-        '-y',
-        '-i', stitchedTemp,
-        '-i', audioPath,
+      validAudioItems.push({
+        filePath: audioPath,
+        trimStart: 0,
+        effectiveDuration: 0,
+        trackStart: 0
+      });
+    }
+
+    if (validAudioItems.length > 0) {
+      const mixArgs = ['-y', '-i', stitchedTemp];
+      const filterParts = ['[0:a]aformat=sample_rates=44100:channel_layouts=stereo[base_a]'];
+      const mixLabels = ['[base_a]'];
+
+      validAudioItems.forEach((item, idx) => {
+        const inputIdx = idx + 1;
+        const trimStart = Number(item.trimStart || 0);
+        const dur = item.effectiveDuration || ((Number(item.trimEnd) || item.duration) - trimStart);
+        const tStart = Math.max(0, Number(item.trackStart !== undefined ? item.trackStart : (item.globalStart || 0)));
+
+        if (trimStart > 0) mixArgs.push('-ss', `${trimStart}`);
+        if (dur > 0) mixArgs.push('-t', `${dur}`);
+        mixArgs.push('-i', item.filePath);
+
+        const delayMs = Math.round(tStart * 1000);
+        const label = `aud_${inputIdx}`;
+        if (delayMs > 0) {
+          filterParts.push(`[${inputIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,adelay=${delayMs}:all=1[${label}]`);
+        } else {
+          filterParts.push(`[${inputIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo[${label}]`);
+        }
+        mixLabels.push(`[${label}]`);
+      });
+
+      const totalInputs = 1 + validAudioItems.length;
+      filterParts.push(`${mixLabels.join('')}amix=inputs=${totalInputs}:duration=first:dropout_transition=0:normalize=0[aout]`);
+
+      mixArgs.push(
+        '-filter_complex', filterParts.join(';'),
+        '-map', '0:v:0',
+        '-map', '[aout]',
         '-c:v', 'copy',
         '-c:a', 'aac',
-        '-map', '0:v:0',
-        '-map', '1:a:0',
-        '-shortest',
+        '-b:a', '192k',
         outputPath
-      ];
-      await runFfmpeg(audioArgs);
+      );
+
+      try {
+        await runFfmpeg(mixArgs);
+      } catch (mixErr) {
+        console.warn('Audio multi-track mix failed, falling back to direct video copy:', mixErr.message);
+        fs.copyFileSync(stitchedTemp, outputPath);
+      }
     } else {
       fs.copyFileSync(stitchedTemp, outputPath);
     }
@@ -358,7 +482,7 @@ async function stitchTimelineClips({ clips, transitions = [], outputPath, audioP
 async function runConcatFallback(normalizedClips, tempDir, stitchedTemp) {
   const concatListPath = path.join(tempDir, 'concat_list.txt');
   const concatContent = normalizedClips
-    .map((p) => `file '${p.replace(/\\/g, '/')}'`)
+    .map((p) => `file '${path.basename(p)}'`)
     .join('\n');
   fs.writeFileSync(concatListPath, concatContent);
 
@@ -367,10 +491,14 @@ async function runConcatFallback(normalizedClips, tempDir, stitchedTemp) {
     '-f', 'concat',
     '-safe', '0',
     '-i', concatListPath,
+    '-map', '0:v:0',
+    '-map', '0:a:0',
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-c:a', 'aac',
-    '-b:a', '128k',
+    '-b:a', '192k',
+    '-ar', '44100',
+    '-ac', '2',
     stitchedTemp
   ];
   await runFfmpeg(concatArgs);
@@ -556,6 +684,7 @@ module.exports = {
   generateSampleClip,
   getVideoDuration,
   stitchTimelineClips,
+  inspectMediaStreams,
   extractKeyframes,
   sampleVideoFrames,
   extractSingleKeyframe,

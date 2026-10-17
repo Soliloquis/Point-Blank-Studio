@@ -576,6 +576,7 @@
 
           <!-- Hidden input for single shot keyframe replacement -->
           <input type="file" id="replace-keyframe-input" accept="image/*" class="file-input-hidden">
+          <input type="file" id="upload-restyle-frame-input" accept="image/*" class="file-input-hidden">
 
           <!-- Ingestion Status / File info -->
           <div id="ingest-status-banner" class="ingest-banner hidden">
@@ -1177,7 +1178,11 @@
             <div id="kf-single-empty" class="kf-empty-notice hidden">
               <span style="font-size:2rem;">🎨</span>
               <p id="kf-single-empty-text" style="margin:8px 0; color:var(--text-muted);">No image exists yet for this stage.</p>
-              <button class="btn btn-sm btn-primary" id="btn-lightbox-restyle">🎨 Restyle Keyframe Now</button>
+              <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+                <button class="btn btn-sm btn-secondary hidden" id="btn-lightbox-upload-restyle">📤 Upload Restyle Image</button>
+                <button class="btn btn-sm btn-secondary hidden" id="btn-lightbox-chain-prev-restyle">🔗 Use Prev End Frame</button>
+                <button class="btn btn-sm btn-primary" id="btn-lightbox-restyle">🎨 Restyle Keyframe Now</button>
+              </div>
             </div>
           </div>
           <div class="kf-stage-meta-row">
@@ -1229,7 +1234,10 @@
               <div id="kf-compare-regened-empty" class="kf-empty-notice hidden">
                 <span style="font-size:1.8rem;">🎨</span>
                 <p style="margin:6px 0; font-size:0.75rem; color:var(--text-dim);">Not Restyled Yet</p>
-                <button class="btn btn-xs btn-primary" id="btn-compare-restyle">🎨 Restyle</button>
+                <div style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">
+                  <button class="btn btn-xs btn-primary" id="btn-compare-restyle">🎨 Restyle</button>
+                  <button class="btn btn-xs btn-secondary" id="btn-compare-upload-restyle">📤 Upload</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1252,6 +1260,8 @@
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" id="btn-kf-replace-source" title="Load custom image for Spatial Previs">📷 Spatial Previs</button>
           <button class="btn btn-secondary btn-sm" id="btn-kf-replace-color" title="Load custom image for True Color Reference">🎨 Color Pass</button>
+          <button class="btn btn-secondary btn-sm" id="btn-kf-upload-restyle" title="Upload custom image into Restyle slot">📤 Restyle Image</button>
+          <button class="btn btn-secondary btn-sm" id="btn-kf-chain-prev-restyle" title="Chain previous shot End Frame to Restyle slot">🔗 Prev End Restyle</button>
           <button class="btn btn-primary btn-sm btn-glow" id="btn-kf-trigger-restyle" title="Restyle this keyframe with Style Anchor">🎨 Restyle Keyframe</button>
         </div>
         <button class="btn btn-secondary btn-sm" id="close-kf-modal-footer-btn">Close</button>

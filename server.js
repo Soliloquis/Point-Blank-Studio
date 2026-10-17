@@ -1276,10 +1276,17 @@ app.post('/api/storyboard/:shotId/replace-keyframe', keyframeUpload.single('keyf
   const shot = (project.storyboard || []).find((s) => s.id === shotId);
   if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-  shot.keyframeUrl = `/storage/keyframes/${req.file.filename}`;
-  shot.keyframePath = req.file.path;
+  const targetFrame = req.body?.targetFrame || 'start';
+  const fileUrl = `/storage/keyframes/${req.file.filename}`;
+  if (targetFrame === 'end') {
+    shot.endKeyframeUrl = fileUrl;
+    shot.endKeyframePath = req.file.path;
+  } else {
+    shot.keyframeUrl = fileUrl;
+    shot.keyframePath = req.file.path;
+  }
   saveProject(project);
-  res.json({ success: true, shot });
+  res.json({ success: true, shot, targetFrame, keyframeUrl: fileUrl });
 });
 
 // Add a blank custom shot to storyboard
@@ -1849,6 +1856,10 @@ app.post('/api/generate-storyboard-clip', async (req, res) => {
     if (!tailKeyframePath) {
       if (shot.styledEndKeyframePath && fs.existsSync(shot.styledEndKeyframePath)) {
         tailKeyframePath = shot.styledEndKeyframePath;
+      } else if (shot.styledEndKeyframeUrl) {
+        const fn = path.basename(shot.styledEndKeyframeUrl);
+        const possiblePath = path.join(KEYFRAMES_DIR, fn);
+        if (fs.existsSync(possiblePath)) tailKeyframePath = possiblePath;
       } else if (shot.compositeEndKeyframeUrl) {
         const fn = path.basename(shot.compositeEndKeyframeUrl);
         const possiblePath = path.join(KEYFRAMES_DIR, fn);
@@ -2635,23 +2646,210 @@ app.post('/api/storyboard/:shotId/upload-color-frame', keyframeUpload.single('co
   const shot = (project.storyboard || []).find((s) => s.id === shotId);
   if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-  shot.colorFrameUrl = `/storage/keyframes/${req.file.filename}`;
-  shot.colorFramePath = req.file.path;
+  const targetFrame = req.body?.targetFrame || 'start';
+  const fileUrl = `/storage/keyframes/${req.file.filename}`;
+  if (targetFrame === 'end') {
+    shot.endColorFrameUrl = fileUrl;
+    shot.endColorFramePath = req.file.path;
+  } else {
+    shot.colorFrameUrl = fileUrl;
+    shot.colorFramePath = req.file.path;
+  }
   saveProject(project);
-  res.json({ success: true, shot, colorFrameUrl: shot.colorFrameUrl });
+  res.json({ success: true, shot, targetFrame, colorFrameUrl: fileUrl });
 });
 
 // Remove True Color Reference Frame from a specific shot
 app.delete('/api/storyboard/:shotId/color-frame', (req, res) => {
   const { shotId } = req.params;
+  const targetFrame = req.query?.targetFrame || req.body?.targetFrame || 'start';
   const project = getProject();
   const shot = (project.storyboard || []).find((s) => s.id === shotId);
   if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-  shot.colorFrameUrl = null;
-  shot.colorFramePath = null;
+  if (targetFrame === 'end') {
+    shot.endColorFrameUrl = null;
+    shot.endColorFramePath = null;
+  } else {
+    shot.colorFrameUrl = null;
+    shot.colorFramePath = null;
+  }
   saveProject(project);
-  res.json({ success: true, shot });
+  res.json({ success: true, shot, targetFrame });
+});
+
+// Upload or replace Restyled Keyframe for a specific shot
+app.post('/api/storyboard/:shotId/upload-restyle-frame', keyframeUpload.single('restyleFrame'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+  const { shotId } = req.params;
+  const targetFrame = req.body?.targetFrame || 'start';
+  const isEnd = targetFrame === 'end';
+  const project = getProject();
+  const shot = (project.storyboard || []).find((s) => s.id === shotId);
+  if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+  const fileUrl = `/storage/keyframes/${req.file.filename}`;
+  const filePath = req.file.path;
+
+  if (isEnd) {
+    shot.styledEndKeyframeUrl = fileUrl;
+    shot.styledEndKeyframePath = filePath;
+    shot.styledEndAt = Date.now();
+    shot.endRestyleMethod = 'upload';
+  } else {
+    shot.styledKeyframeUrl = fileUrl;
+    shot.styledKeyframePath = filePath;
+    shot.styledAt = Date.now();
+    shot.restyleMethod = 'upload';
+  }
+
+  saveProject(project);
+  res.json({
+    success: true,
+    shot,
+    targetFrame,
+    styledKeyframeUrl: fileUrl
+  });
+});
+
+// Remove Restyled Keyframe from a specific shot
+app.delete('/api/storyboard/:shotId/restyle-frame', (req, res) => {
+  const { shotId } = req.params;
+  const targetFrame = req.query?.targetFrame || req.body?.targetFrame || 'start';
+  const isEnd = targetFrame === 'end';
+  const project = getProject();
+  const shot = (project.storyboard || []).find((s) => s.id === shotId);
+  if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+  if (isEnd) {
+    shot.styledEndKeyframeUrl = null;
+    shot.styledEndKeyframePath = null;
+    shot.styledEndAt = null;
+    shot.endRestyleMethod = null;
+  } else {
+    shot.styledKeyframeUrl = null;
+    shot.styledKeyframePath = null;
+    shot.styledAt = null;
+    shot.restyleMethod = null;
+  }
+
+  saveProject(project);
+  res.json({ success: true, shot, targetFrame });
+});
+
+// Chain previous shot's End Frame into Restyle slot
+app.post('/api/storyboard/:shotId/chain-prev-restyle', async (req, res) => {
+  try {
+    const { shotId } = req.params;
+    const targetFrame = req.body?.targetFrame || 'start';
+    const isEnd = targetFrame === 'end';
+    const project = getProject();
+    const shotIndex = (project.storyboard || []).findIndex(s => s.id === shotId);
+    if (shotIndex <= 0) {
+      return res.status(400).json({ error: 'Cannot chain: This is the first shot or shot not found.' });
+    }
+
+    const previousShot = project.storyboard[shotIndex - 1];
+    const currentShot = project.storyboard[shotIndex];
+
+    let srcPath = null;
+    let methodDesc = '';
+
+    // 1. Previous shot restyled end frame
+    if (previousShot.styledEndKeyframePath && fs.existsSync(previousShot.styledEndKeyframePath)) {
+      srcPath = previousShot.styledEndKeyframePath;
+      methodDesc = `Shot #${previousShot.shotNumber || shotIndex} Restyled End Frame`;
+    } else if (previousShot.styledEndKeyframeUrl) {
+      const p = path.join(KEYFRAMES_DIR, path.basename(previousShot.styledEndKeyframeUrl));
+      if (fs.existsSync(p)) {
+        srcPath = p;
+        methodDesc = `Shot #${previousShot.shotNumber || shotIndex} Restyled End Frame`;
+      }
+    }
+
+    // 2. Previous shot video clip tail frame
+    if (!srcPath && previousShot.generatedClip) {
+      let clipPath = previousShot.generatedClip.filePath;
+      if (!clipPath || !fs.existsSync(clipPath)) {
+        clipPath = path.join(CLIPS_DIR, previousShot.generatedClip.filename || path.basename(previousShot.generatedClip.url || ''));
+      }
+      if (fs.existsSync(clipPath)) {
+        const extracted = await extractLastFrame(clipPath, KEYFRAMES_DIR, previousShot.shotNumber || shotIndex);
+        if (extracted && fs.existsSync(extracted.framePath)) {
+          srcPath = extracted.framePath;
+          methodDesc = `Shot #${previousShot.shotNumber || shotIndex} Video Tail Frame`;
+        }
+      }
+    }
+
+    // 3. Previous shot composite end frame
+    if (!srcPath && previousShot.compositeEndKeyframeUrl) {
+      const p = path.join(KEYFRAMES_DIR, path.basename(previousShot.compositeEndKeyframeUrl));
+      if (fs.existsSync(p)) {
+        srcPath = p;
+        methodDesc = `Shot #${previousShot.shotNumber || shotIndex} Composite End Frame`;
+      }
+    }
+
+    // 4. Previous shot restyled start frame
+    if (!srcPath && previousShot.styledKeyframePath && fs.existsSync(previousShot.styledKeyframePath)) {
+      srcPath = previousShot.styledKeyframePath;
+      methodDesc = `Shot #${previousShot.shotNumber || shotIndex} Restyled Start Frame`;
+    } else if (!srcPath && previousShot.styledKeyframeUrl) {
+      const p = path.join(KEYFRAMES_DIR, path.basename(previousShot.styledKeyframeUrl));
+      if (fs.existsSync(p)) {
+        srcPath = p;
+        methodDesc = `Shot #${previousShot.shotNumber || shotIndex} Restyled Start Frame`;
+      }
+    }
+
+    // 5. Previous shot true color end frame or spatial previs end frame
+    if (!srcPath && previousShot.endColorFramePath && fs.existsSync(previousShot.endColorFramePath)) {
+      srcPath = previousShot.endColorFramePath;
+      methodDesc = `Shot #${previousShot.shotNumber || shotIndex} True Color End Frame`;
+    } else if (!srcPath && previousShot.endKeyframePath && fs.existsSync(previousShot.endKeyframePath)) {
+      srcPath = previousShot.endKeyframePath;
+      methodDesc = `Shot #${previousShot.shotNumber || shotIndex} Spatial Previs End Frame`;
+    }
+
+    if (!srcPath || !fs.existsSync(srcPath)) {
+      return res.status(400).json({
+        error: `Shot #${previousShot.shotNumber || shotIndex} does not have an end frame or generated video clip to chain from yet. Please restyle or generate Shot #${previousShot.shotNumber || shotIndex} first, or upload a custom image.`
+      });
+    }
+
+    // Copy to a new unique keyframe file for current shot
+    const ext = path.extname(srcPath) || '.png';
+    const targetFilename = `restyle_chain_shot${currentShot.shotNumber || shotIndex + 1}_${Date.now()}${ext}`;
+    const targetPath = path.join(KEYFRAMES_DIR, targetFilename);
+    fs.copyFileSync(srcPath, targetPath);
+    const targetUrl = `/storage/keyframes/${targetFilename}`;
+
+    if (isEnd) {
+      currentShot.styledEndKeyframeUrl = targetUrl;
+      currentShot.styledEndKeyframePath = targetPath;
+      currentShot.styledEndAt = Date.now();
+      currentShot.endRestyleMethod = 'chain_prev_end';
+    } else {
+      currentShot.styledKeyframeUrl = targetUrl;
+      currentShot.styledKeyframePath = targetPath;
+      currentShot.styledAt = Date.now();
+      currentShot.restyleMethod = 'chain_prev_end';
+    }
+
+    saveProject(project);
+
+    res.json({
+      success: true,
+      message: `Chained ${methodDesc} into Shot #${currentShot.shotNumber || shotIndex + 1} ${targetFrame.toUpperCase()} restyle slot!`,
+      shot: currentShot,
+      targetFrame,
+      styledKeyframeUrl: targetUrl
+    });
+  } catch (err) {
+    console.error('Chain prev restyle error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Upload companion textured/shaded video to extract True Color frames for all storyboard shots
@@ -3472,23 +3670,56 @@ app.post('/api/export-video', async (req, res) => {
       return res.status(400).json({ error: 'No clips on timeline to export' });
     }
 
-    const resolvedClips = timelineClips.map((c) => {
+    const resolveItemPath = (c) => {
       let resolvedPath = c.filePath;
       if (!resolvedPath || !fs.existsSync(resolvedPath)) {
         const fn = sanitizeFilename(c.filename || path.basename(c.url || ''));
-        resolvedPath = path.join(CLIPS_DIR, fn);
+        const possibleDirs = [CLIPS_DIR, AUDIO_DIR, UPLOADS_DIR, KEYFRAMES_DIR];
+        for (const dir of possibleDirs) {
+          const testPath = path.join(dir, fn);
+          if (fs.existsSync(testPath)) {
+            resolvedPath = testPath;
+            break;
+          }
+        }
+        if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+          const isAudio = c.track === 'a1' || c.track === 'a2' || c.type === 'audio' || /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(fn);
+          resolvedPath = path.join(isAudio ? AUDIO_DIR : CLIPS_DIR, fn);
+        }
       }
       return {
         ...c,
         filePath: resolvedPath
       };
+    };
+
+    const resolvedTimeline = timelineClips.map(resolveItemPath);
+
+    // Separate visual clips from audio stems (audio tracks a1/a2, type=audio, or audio extension)
+    const visualClips = resolvedTimeline.filter((c) => {
+      const isAudioTrack = c.track === 'a1' || c.track === 'a2';
+      const isAudioType = c.type === 'audio';
+      const isAudioExt = /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(c.filePath || c.url || c.filename || '');
+      return !isAudioTrack && !isAudioType && !isAudioExt;
     });
+
+    const audioClips = resolvedTimeline.filter((c) => {
+      const isAudioTrack = c.track === 'a1' || c.track === 'a2';
+      const isAudioType = c.type === 'audio';
+      const isAudioExt = /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(c.filePath || c.url || c.filename || '');
+      return isAudioTrack || isAudioType || isAudioExt;
+    });
+
+    if (visualClips.length === 0) {
+      return res.status(400).json({ error: 'No visual clips (video or animatic) on timeline to export' });
+    }
 
     const exportFilename = `export_${Date.now()}.mp4`;
     const outputPath = path.join(EXPORTS_DIR, exportFilename);
 
     await stitchTimelineClips({
-      clips: resolvedClips,
+      clips: visualClips,
+      audioClips,
       transitions,
       outputPath,
       targetResolution,
@@ -3504,7 +3735,7 @@ app.post('/api/export-video', async (req, res) => {
       url: `/storage/exports/${exportFilename}`,
       duration: totalDuration,
       createdAt: new Date().toISOString(),
-      clipCount: timelineClips.length
+      clipCount: visualClips.length
     };
 
     const project = getProject();
