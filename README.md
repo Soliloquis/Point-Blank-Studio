@@ -2,7 +2,7 @@
 
 > **AI-Powered cinematic production studio for the masses — fusing traditional pre-visualization workflows with state-of-the-art AI video diffusion models.**
 
-[![Point Blank Studio Demo Video](https://img.youtube.com/vi/6RdwvzVaKJ0/maxresdefault.jpg)](https://youtu.be/6RdwvzVaKJ0?si=Wl6POMCLskY6pp7U)
+[![Point Blank Studio Demo Video](https://img.youtube.com/vi/jIf-p3cIEYg/maxresdefault.jpg)](https://youtu.be/jIf-p3cIEYg?si=x9lFj8NMqBJDQSfZ)
 
 A professional desktop AI video production studio connecting video models with a unified visual style anchor as the sole aesthetic source of truth, featuring dual-video ingestion, shot in/out range scrubbing, dual-keyframe progression pipelines, 4-corner perspective layer compositing, and non-destructive timeline assembly.
 
