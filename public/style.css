@@ -3195,13 +3195,14 @@ input[type="range"].vertical-range-slider.master-fader {
 }
 
 .nle-track-header-col {
-  width: 120px;
+  width: 240px;
   background: rgba(14, 18, 28, 0.98);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   z-index: 6;
+  box-sizing: border-box;
 }
 
 .nle-ruler-corner-header {
@@ -3209,17 +3210,25 @@ input[type="range"].vertical-range-slider.master-fader {
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  justify-content: space-between;
+  padding: 0 12px;
   background: rgba(0, 0, 0, 0.4);
 }
 
 .nle-track-header-cell {
-  height: 72px;
   border-bottom: 1px solid var(--border-subtle);
-  padding: 6px 8px;
+  padding: 6px 12px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.track-header-row {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  width: 100%;
 }
 
 .nle-track-header-cell.a1-header {
@@ -7130,3 +7139,228 @@ body.nle-resizing canvas {
   accent-color: var(--accent-cyan);
   cursor: pointer;
 }
+
+/* ==========================================================================
+   COLOR GRADING GRAPH & BEZIER CURVE TRACK
+   ========================================================================== */
+
+.nle-track-header-cell.cg-header {
+  height: 110px;
+  background: linear-gradient(180deg, rgba(22, 17, 34, 0.98), rgba(14, 11, 24, 0.98));
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 5px;
+  box-sizing: border-box;
+}
+
+.cg-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.cg-status-badge {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.cg-status-badge.bypassed {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.track-pill.track-cg {
+  background: linear-gradient(135deg, #f59e0b, #ec4899);
+  color: #0b0f17;
+  font-weight: 800;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+  letter-spacing: 0.05em;
+}
+
+.cg-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.cg-channel-select {
+  flex: 1;
+  min-width: 0;
+  background: rgba(10, 14, 24, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f1f5f9;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cg-channel-select:focus,
+.cg-channel-select:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+.cg-preset-btn {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.cg-preset-btn:hover {
+  background: rgba(245, 158, 11, 0.3);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+.cg-keyframe-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.cg-value-pill {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+  min-width: 60px;
+  text-align: center;
+}
+
+.cg-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cg-key-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #cbd5e1;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 3px 6px;
+  cursor: pointer;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.cg-key-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.cg-key-btn.key-add {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.1);
+  font-weight: 700;
+}
+
+.cg-key-btn.key-add:hover {
+  background: rgba(56, 189, 248, 0.3);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  color: #fff;
+}
+
+.cg-key-btn.key-del {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.cg-key-btn.key-del:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* Color Grade Track Lane */
+.nle-lane-colorgrade {
+  height: 110px;
+  background: radial-gradient(circle at 50% 50%, rgba(16, 13, 26, 0.7), rgba(8, 10, 18, 0.95));
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  user-select: none;
+  cursor: crosshair;
+}
+
+.colorgrade-graph-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+}
+
+/* Tooltip for frame and value inspection */
+.colorgrade-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 10px rgba(245, 158, 11, 0.25);
+  backdrop-filter: blur(8px);
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #f1f5f9;
+  z-index: 30;
+  white-space: nowrap;
+  transform: translate(-50%, -125%);
+  transition: opacity 0.1s ease;
+}
+
+.colorgrade-tooltip .tt-frame {
+  color: var(--accent-cyan);
+  font-weight: 700;
+  margin-right: 5px;
+}
+
+.colorgrade-tooltip .tt-val {
+  color: #fbbf24;
+  font-weight: 700;
+}
+

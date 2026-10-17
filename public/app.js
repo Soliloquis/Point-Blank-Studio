@@ -305,6 +305,28 @@ class StudioApp {
     this.btnToggleA2Solo = document.getElementById('btn-toggle-a2-solo');
     this.btnToggleA2Lock = document.getElementById('btn-toggle-a2-lock');
 
+    // Color Grading Graph & Bezier Engine Elements
+    this.timelineTrackCg = document.getElementById('timeline-track-colorgrade');
+    this.cgGraphCanvas = document.getElementById('colorgrade-graph-canvas');
+    this.cgTooltip = document.getElementById('colorgrade-tooltip');
+    this.btnToggleCgVis = document.getElementById('btn-toggle-cg-vis');
+    this.btnResetCgChannel = document.getElementById('btn-reset-cg-channel');
+    this.cgChannelSelect = document.getElementById('cg-channel-select');
+    this.btnCgPresets = document.getElementById('btn-cg-presets');
+    this.cgValueDisplay = document.getElementById('cg-value-display');
+    this.btnCgPrevKey = document.getElementById('btn-cg-prev-key');
+    this.btnCgAddKey = document.getElementById('btn-cg-add-key');
+    this.btnCgNextKey = document.getElementById('btn-cg-next-key');
+    this.btnCgDelKey = document.getElementById('btn-cg-del-key');
+    this.pbCgMatrix = document.getElementById('pb-cg-matrix');
+    this.selectedCgKeyframe = null;
+    this.selectedCgKeyframeIndex = -1;
+    this.hoveredCgKeyframe = null;
+    this.hoveredCgHandle = null;
+    this.isDraggingCg = false;
+    this.dragTarget = null;
+    this.colorGradingPresetIndex = 0;
+
     // Layered Audio Channel Mixer Elements
     this.btnAudioModeMixer = document.getElementById('btn-audio-mode-mixer');
     this.btnAudioModeEq = document.getElementById('btn-audio-mode-eq');
@@ -1095,6 +1117,9 @@ class StudioApp {
 
     // NLE Media Pool Engine
     this.initMediaPool();
+
+    // NLE Color Grading Graph & Real-time Bezier Engine
+    this.initColorGrading();
 
     // Timeline actions
     this.btnImportApprovedClips?.addEventListener('click', () => this.syncStoryboardToMediaPool());
@@ -3950,6 +3975,9 @@ class StudioApp {
       if (this.inspectorEmptyState) this.inspectorEmptyState.classList.remove('hidden');
       if (this.inspectorClipTitle) this.inspectorClipTitle.textContent = 'No Clip Selected';
       this.renderRulerTicks(15);
+      const wrapperWidth = this.timelineTrackWrapper?.clientWidth || 1600;
+      this.renderColorGradeGraph(15, wrapperWidth);
+      this.applyColorGrading(0);
       return;
     }
 
@@ -4139,6 +4167,10 @@ class StudioApp {
         this.selectedTimelineClipId = null;
       }
     }
+
+    // 6. Synchronize and Render Color Grading Bezier Graph
+    this.renderColorGradeGraph(totalDuration, totalWidthPx);
+    this.applyColorGrading(this.getCurrentGlobalTimelineTime());
   }
 
   drawTimeAnchoredWaveform(canvas, clip, dur, widthPx, trackType) {
@@ -4251,7 +4283,7 @@ class StudioApp {
       fitDur = this.getSequenceTotalDuration();
     }
 
-    const wrapperWidth = this.timelineTrackWrapper.clientWidth - 120;
+    const wrapperWidth = this.timelineTrackWrapper.clientWidth - 240;
     if (fitDur > 0 && wrapperWidth > 100) {
       const optimalZoom = Math.max(40, Math.min(220, Math.floor(wrapperWidth / fitDur)));
       this.applyTimelineZoom(optimalZoom, true);
@@ -4842,6 +4874,7 @@ class StudioApp {
     this.updatePlayheadUi(globalTime);
     const isPlayingCurrent = !this.getActiveVideoDeck()?.paused || this.isAnimaticPlaying || this.isAudioOnlyPlaying;
     this.syncTimelineAudio(globalTime, isPlayingCurrent);
+    this.applyColorGrading(globalTime);
 
     // --- Transition & Cross Dissolve Playback Engine (Visual Clips Only) ---
     if (visualClips.length > 1 && clip && clip.type !== 'audio') {
@@ -5200,6 +5233,7 @@ class StudioApp {
 
     this.syncTimelineAudio(globalSec, wasPlaying);
     this.updatePlayheadUi(globalSec);
+    this.applyColorGrading(globalSec);
 
     if (wasPlaying) {
       if (visualClips.length === 0) this.startAudioOnlyPlayback();
@@ -5275,9 +5309,23 @@ class StudioApp {
       } else if (e.code === 'KeyO') {
         e.preventDefault();
         this.markOutAtPlayhead();
+      } else if (e.code === 'KeyK') {
+        e.preventDefault();
+        const curTime = this.getCurrentGlobalTimelineTime();
+        this.addOrUpdateCgKeyframeAtTime(curTime);
+      } else if (e.code === 'BracketLeft') {
+        e.preventDefault();
+        this.jumpCgKeyframe(-1);
+      } else if (e.code === 'BracketRight') {
+        e.preventDefault();
+        this.jumpCgKeyframe(1);
       } else if (e.code === 'Delete' || e.code === 'Backspace') {
         e.preventDefault();
-        this.removeSelectedTimelineClip();
+        if (this.selectedCgKeyframe) {
+          this.deleteSelectedCgKeyframe();
+        } else {
+          this.removeSelectedTimelineClip();
+        }
       } else if (e.code === 'KeyM') {
         e.preventDefault();
         if (this.cinemaPlayer) this.cinemaPlayer.muted = !this.cinemaPlayer.muted;
@@ -5291,6 +5339,971 @@ class StudioApp {
         this.seekTimelineTo(total);
       }
     });
+  }
+
+  // =========================================================================
+  // COLOR GRADING GRAPH & BEZIER CURVE ENGINE
+  // =========================================================================
+
+  getDefaultColorGrading() {
+    return {
+      enabled: true,
+      activeChannel: 'exposure',
+      channels: {
+        exposure: {
+          name: 'Exposure',
+          unit: 'EV',
+          min: -2.0,
+          max: 2.0,
+          defaultVal: 0.0,
+          color: '#f59e0b',
+          glow: 'rgba(245, 158, 11, 0.35)',
+          keyframes: [
+            { time: 0.0, value: 0.0, inHandle: { dt: -0.4, dv: 0.0 }, outHandle: { dt: 0.4, dv: 0.0 }, interpolation: 'bezier' }
+          ]
+        },
+        contrast: {
+          name: 'Contrast',
+          unit: '',
+          min: -0.8,
+          max: 0.8,
+          defaultVal: 0.0,
+          color: '#06b6d4',
+          glow: 'rgba(6, 182, 212, 0.35)',
+          keyframes: [
+            { time: 0.0, value: 0.0, inHandle: { dt: -0.4, dv: 0.0 }, outHandle: { dt: 0.4, dv: 0.0 }, interpolation: 'bezier' }
+          ]
+        },
+        saturation: {
+          name: 'Saturation',
+          unit: '',
+          min: -1.0,
+          max: 1.0,
+          defaultVal: 0.0,
+          color: '#ec4899',
+          glow: 'rgba(236, 72, 153, 0.35)',
+          keyframes: [
+            { time: 0.0, value: 0.0, inHandle: { dt: -0.4, dv: 0.0 }, outHandle: { dt: 0.4, dv: 0.0 }, interpolation: 'bezier' }
+          ]
+        },
+        temperature: {
+          name: 'Temperature',
+          unit: 'K',
+          min: -100,
+          max: 100,
+          defaultVal: 0,
+          color: '#f97316',
+          glow: 'rgba(249, 115, 22, 0.35)',
+          keyframes: [
+            { time: 0.0, value: 0, inHandle: { dt: -0.4, dv: 0 }, outHandle: { dt: 0.4, dv: 0 }, interpolation: 'bezier' }
+          ]
+        },
+        tint: {
+          name: 'Tint',
+          unit: '',
+          min: -100,
+          max: 100,
+          defaultVal: 0,
+          color: '#10b981',
+          glow: 'rgba(16, 185, 129, 0.35)',
+          keyframes: [
+            { time: 0.0, value: 0, inHandle: { dt: -0.4, dv: 0 }, outHandle: { dt: 0.4, dv: 0 }, interpolation: 'bezier' }
+          ]
+        }
+      }
+    };
+  }
+
+  initColorGrading() {
+    this.timelineTrackCg = document.getElementById('timeline-track-colorgrade');
+    this.cgGraphCanvas = document.getElementById('colorgrade-graph-canvas');
+    this.cgTooltip = document.getElementById('colorgrade-tooltip');
+    this.btnToggleCgVis = document.getElementById('btn-toggle-cg-vis');
+    this.btnResetCgChannel = document.getElementById('btn-reset-cg-channel');
+    this.cgChannelSelect = document.getElementById('cg-channel-select');
+    this.btnCgPresets = document.getElementById('btn-cg-presets');
+    this.cgValueDisplay = document.getElementById('cg-value-display');
+    this.btnCgPrevKey = document.getElementById('btn-cg-prev-key');
+    this.btnCgAddKey = document.getElementById('btn-cg-add-key');
+    this.btnCgNextKey = document.getElementById('btn-cg-next-key');
+    this.btnCgDelKey = document.getElementById('btn-cg-del-key');
+    this.pbCgMatrix = document.getElementById('pb-cg-matrix');
+    this.cgStatusBadge = document.getElementById('cg-status-badge');
+
+    this.selectedCgKeyframe = null;
+    this.selectedCgKeyframeIndex = -1;
+    this.hoveredCgKeyframe = null;
+    this.hoveredCgHandle = null;
+    this.isDraggingCg = false;
+    this.dragTarget = null;
+    this.colorGradingPresetIndex = 0;
+
+    if (!this.project.colorGrading) {
+      this.project.colorGrading = this.getDefaultColorGrading();
+    }
+    this.colorGrading = this.project.colorGrading;
+
+    if (this.cgStatusBadge) {
+      this.cgStatusBadge.textContent = this.colorGrading.enabled ? 'Live' : 'Bypassed';
+      this.cgStatusBadge.className = this.colorGrading.enabled ? 'cg-status-badge active' : 'cg-status-badge bypassed';
+    }
+
+    // Toggle live grading active / bypass
+    this.btnToggleCgVis?.addEventListener('click', () => {
+      this.colorGrading.enabled = !this.colorGrading.enabled;
+      this.btnToggleCgVis.classList.toggle('active', this.colorGrading.enabled);
+      this.btnToggleCgVis.textContent = this.colorGrading.enabled ? '👁️' : '🚫';
+      this.btnToggleCgVis.title = this.colorGrading.enabled ? 'Live Color Grading Active (Click to bypass)' : 'Color Grading Bypassed (Click to enable)';
+      if (this.cgStatusBadge) {
+        this.cgStatusBadge.textContent = this.colorGrading.enabled ? 'Live' : 'Bypassed';
+        this.cgStatusBadge.className = this.colorGrading.enabled ? 'cg-status-badge active' : 'cg-status-badge bypassed';
+      }
+      this.applyColorGrading(this.getCurrentGlobalTimelineTime());
+      this.renderColorGradeGraph();
+      this.saveProject();
+    });
+
+    // Reset current channel curve
+    this.btnResetCgChannel?.addEventListener('click', () => {
+      const activeChKey = this.colorGrading.activeChannel || 'exposure';
+      const ch = this.colorGrading.channels[activeChKey];
+      if (ch) {
+        ch.keyframes = [
+          { time: 0.0, value: ch.defaultVal, inHandle: { dt: -0.4, dv: 0.0 }, outHandle: { dt: 0.4, dv: 0.0 }, interpolation: 'bezier' }
+        ];
+        this.selectedCgKeyframe = null;
+        this.selectedCgKeyframeIndex = -1;
+        this.applyColorGrading(this.getCurrentGlobalTimelineTime());
+        this.renderColorGradeGraph();
+        this.saveProject();
+      }
+    });
+
+    // Channel dropdown switcher
+    this.cgChannelSelect?.addEventListener('change', (e) => {
+      this.colorGrading.activeChannel = e.target.value;
+      this.selectedCgKeyframe = null;
+      this.selectedCgKeyframeIndex = -1;
+      this.applyColorGrading(this.getCurrentGlobalTimelineTime());
+      this.renderColorGradeGraph();
+      this.saveProject();
+    });
+
+    // Add / Update Keyframe at Playhead button
+    this.btnCgAddKey?.addEventListener('click', () => {
+      const curTime = this.getCurrentGlobalTimelineTime();
+      this.addOrUpdateCgKeyframeAtTime(curTime);
+    });
+
+    // Jump to Prev / Next Keyframe
+    this.btnCgPrevKey?.addEventListener('click', () => {
+      this.jumpCgKeyframe(-1);
+    });
+    this.btnCgNextKey?.addEventListener('click', () => {
+      this.jumpCgKeyframe(1);
+    });
+
+    // Delete selected keyframe
+    this.btnCgDelKey?.addEventListener('click', () => {
+      this.deleteSelectedCgKeyframe();
+    });
+
+    // Preset color looks
+    this.btnCgPresets?.addEventListener('click', () => {
+      this.cycleCgPreset();
+    });
+
+    // Canvas Mouse & Interaction Setup
+    this.setupColorGradingCanvasInteractions();
+  }
+
+  evaluateChannelCurve(channelKey, time) {
+    if (!this.colorGrading || !this.colorGrading.channels) return 0;
+    const ch = this.colorGrading.channels[channelKey];
+    if (!ch || !ch.keyframes || ch.keyframes.length === 0) return ch?.defaultVal || 0;
+
+    const kfs = ch.keyframes;
+    if (kfs.length === 1) return kfs[0].value;
+    if (time <= kfs[0].time) return kfs[0].value;
+    if (time >= kfs[kfs.length - 1].time) return kfs[kfs.length - 1].value;
+
+    // Find segment [Ki, Ki+1]
+    let i = 0;
+    while (i < kfs.length - 1 && kfs[i + 1].time < time) {
+      i++;
+    }
+    const k0 = kfs[i];
+    const k1 = kfs[i + 1];
+
+    if (k0.interpolation === 'hold') return k0.value;
+    if (k0.interpolation === 'linear') {
+      const span = Math.max(0.0001, k1.time - k0.time);
+      const alpha = Math.min(1, Math.max(0, (time - k0.time) / span));
+      return k0.value + alpha * (k1.value - k0.value);
+    }
+
+    // Cubic Bezier Evaluation
+    const p0x = k0.time;
+    const p0y = k0.value;
+    const p3x = k1.time;
+    const p3y = k1.value;
+
+    const outDt = Math.max(0, k0.outHandle ? k0.outHandle.dt : (p3x - p0x) * 0.35);
+    const outDv = k0.outHandle ? k0.outHandle.dv : 0;
+    const p1x = Math.max(p0x, Math.min(p3x, p0x + outDt));
+    const p1y = p0y + outDv;
+
+    const inDt = Math.min(0, k1.inHandle ? k1.inHandle.dt : -(p3x - p0x) * 0.35);
+    const inDv = k1.inHandle ? k1.inHandle.dv : 0;
+    const p2x = Math.max(p0x, Math.min(p3x, p3x + inDt));
+    const p2y = p3y + inDv;
+
+    // Binary search parameter u in [0, 1] where Bx(u) == time
+    let lo = 0, hi = 1, u = 0.5;
+    for (let iter = 0; iter < 18; iter++) {
+      u = (lo + hi) * 0.5;
+      const inv = 1 - u;
+      const curX = inv * inv * inv * p0x + 3 * inv * inv * u * p1x + 3 * inv * u * u * p2x + u * u * u * p3x;
+      if (curX < time) lo = u;
+      else hi = u;
+    }
+
+    const inv = 1 - u;
+    const curY = inv * inv * inv * p0y + 3 * inv * inv * u * p1y + 3 * inv * u * u * p2y + u * u * u * p3y;
+    return Math.max(ch.min, Math.min(ch.max, curY));
+  }
+
+  applyColorGrading(globalTime) {
+    if (!this.colorGrading) return;
+    const enabled = this.colorGrading.enabled;
+
+    const exp = enabled ? this.evaluateChannelCurve('exposure', globalTime) : 0;
+    const cont = enabled ? this.evaluateChannelCurve('contrast', globalTime) : 0;
+    const sat = enabled ? this.evaluateChannelCurve('saturation', globalTime) : 0;
+    const temp = enabled ? this.evaluateChannelCurve('temperature', globalTime) : 0;
+    const tint = enabled ? this.evaluateChannelCurve('tint', globalTime) : 0;
+
+    // Update header value readout for active channel
+    const activeChKey = this.colorGrading.activeChannel || 'exposure';
+    const activeCh = this.colorGrading.channels[activeChKey];
+    if (this.cgValueDisplay && activeCh) {
+      const val = enabled ? this.evaluateChannelCurve(activeChKey, globalTime) : 0;
+      let formatted = val.toFixed(2);
+      if (val > 0) formatted = '+' + formatted;
+      if (activeCh.unit) formatted += ' ' + activeCh.unit;
+      this.cgValueDisplay.textContent = formatted;
+      this.cgValueDisplay.style.color = activeCh.color;
+      this.cgValueDisplay.style.borderColor = activeCh.color + '55';
+    }
+
+    // CSS Multipliers
+    const brightnessFactor = Math.max(0.05, Math.min(3.5, Math.pow(2, exp)));
+    const contrastFactor = Math.max(0.1, Math.min(3.0, 1.0 + cont));
+    const saturationFactor = Math.max(0.0, Math.min(3.0, 1.0 + sat));
+
+    // Update SVG feColorMatrix for Temperature & Tint
+    if (this.pbCgMatrix) {
+      const tNorm = temp / 100; // -1 to +1
+      const tintNorm = tint / 100; // -1 to +1
+
+      let rR = 1.0, rG = 0.0, rB = 0.0;
+      let gR = 0.0, gG = 1.0, gB = 0.0;
+      let bR = 0.0, bG = 0.0, bB = 1.0;
+
+      if (tNorm > 0) {
+        rR += tNorm * 0.28;
+        gG += tNorm * 0.06;
+        bB -= tNorm * 0.24;
+      } else if (tNorm < 0) {
+        const c = Math.abs(tNorm);
+        rR -= c * 0.22;
+        bB += c * 0.32;
+      }
+
+      if (tintNorm > 0) {
+        rR += tintNorm * 0.12;
+        gG -= tintNorm * 0.16;
+        bB += tintNorm * 0.12;
+      } else if (tintNorm < 0) {
+        const g = Math.abs(tintNorm);
+        rR -= g * 0.12;
+        gG += g * 0.22;
+        bB -= g * 0.12;
+      }
+
+      this.pbCgMatrix.setAttribute('values', `
+        ${rR.toFixed(3)} ${rG.toFixed(3)} ${rB.toFixed(3)} 0 0
+        ${gR.toFixed(3)} ${gG.toFixed(3)} ${gB.toFixed(3)} 0 0
+        ${bR.toFixed(3)} ${bG.toFixed(3)} ${bB.toFixed(3)} 0 0
+        0 0 0 1 0
+      `);
+    }
+
+    let filterStr = 'none';
+    if (enabled && (Math.abs(exp) > 0.001 || Math.abs(cont) > 0.001 || Math.abs(sat) > 0.001 || Math.abs(temp) > 0.001 || Math.abs(tint) > 0.001)) {
+      filterStr = `url(#pb-cg-filter) brightness(${brightnessFactor.toFixed(3)}) contrast(${contrastFactor.toFixed(3)}) saturate(${saturationFactor.toFixed(3)})`;
+    }
+
+    const targets = [this.cinemaPlayer, this.cinemaPlayerB, this.cinemaImagePlayer, this.cinemaImagePlayerB];
+    targets.forEach(el => {
+      if (el) el.style.filter = filterStr;
+    });
+
+    this.drawCgPlayheadCursor(globalTime);
+  }
+
+  drawCgPlayheadCursor(globalTime) {
+    if (this.cgGraphCanvas && this.colorGrading) {
+      this.renderColorGradeGraph();
+    }
+  }
+
+  renderColorGradeGraph(totalDuration, totalWidthPx) {
+    if (!this.cgGraphCanvas) return;
+    const canvas = this.cgGraphCanvas;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dur = Math.max(0.1, totalDuration || this.getSequenceTotalDuration() || 15);
+    const zoom = this.timelineZoom || 95;
+    const width = totalWidthPx || Math.max(this.timelineTrackWrapper?.clientWidth || 1600, Math.round(dur * zoom) + 200);
+    const height = 110;
+
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    }
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const padTop = 16;
+    const padBottom = 16;
+    const graphH = height - padTop - padBottom;
+
+    // 1. Draw Visual Clip Boundary Blocks (Sync with video layers)
+    const visualClips = this.getVisualTimelineClips();
+    visualClips.forEach((c, idx) => {
+      const cStart = (c.globalStart !== undefined ? c.globalStart : (c.trackStart || 0)) * zoom;
+      const cDur = (c.effectiveDuration || Math.max(0.1, (c.trimEnd || c.duration) - (c.trimStart || 0))) * zoom;
+
+      ctx.fillStyle = idx % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.04)';
+      ctx.fillRect(cStart, 0, cDur, height);
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cStart, 0);
+      ctx.lineTo(cStart, height);
+      ctx.stroke();
+
+      ctx.font = '9px monospace';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.fillText(c.title || `Shot ${idx + 1}`, cStart + 6, 12);
+    });
+
+    const activeChKey = this.colorGrading?.activeChannel || 'exposure';
+    const activeCh = this.colorGrading?.channels?.[activeChKey] || { min: -2, max: 2, defaultVal: 0, color: '#f59e0b', unit: 'EV' };
+    const valRange = Math.max(0.001, activeCh.max - activeCh.min);
+
+    const valToY = (v) => {
+      const norm = (v - activeCh.min) / valRange;
+      return padTop + (1.0 - norm) * graphH;
+    };
+
+    // 2. Horizontal Reference Grid Lines
+    const neutralY = valToY(activeCh.defaultVal || 0);
+    const upperY = valToY(activeCh.min + valRange * 0.75);
+    const lowerY = valToY(activeCh.min + valRange * 0.25);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, upperY);
+    ctx.lineTo(width, upperY);
+    ctx.moveTo(0, lowerY);
+    ctx.lineTo(width, lowerY);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(0, neutralY);
+    ctx.lineTo(width, neutralY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillText(`${activeCh.max > 0 ? '+' : ''}${activeCh.max}${activeCh.unit || ''}`, 6, padTop + 2);
+    ctx.fillText(`0.0${activeCh.unit || ''}`, 6, neutralY - 3);
+    ctx.fillText(`${activeCh.min}${activeCh.unit || ''}`, 6, height - padBottom + 8);
+
+    // 3. Faint Ghost Curves for Inactive Channels
+    const allChannels = this.colorGrading?.channels || {};
+    Object.keys(allChannels).forEach(chKey => {
+      if (chKey === activeChKey) return;
+      const ch = allChannels[chKey];
+      if (!ch || !ch.keyframes || ch.keyframes.length === 0) return;
+
+      const cRange = Math.max(0.001, ch.max - ch.min);
+      ctx.beginPath();
+      ctx.strokeStyle = ch.color + '44';
+      ctx.lineWidth = 1.2;
+
+      const stepPx = 6;
+      let first = true;
+      for (let x = 0; x <= width; x += stepPx) {
+        const t = x / zoom;
+        const v = this.evaluateChannelCurve(chKey, t);
+        const norm = (v - ch.min) / cRange;
+        const y = padTop + (1.0 - norm) * graphH;
+        if (first) {
+          ctx.moveTo(x, y);
+          first = false;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+    });
+
+    // 4. Render Active Bezier Curve & Fill
+    const kfs = activeCh.keyframes || [];
+    if (kfs.length > 0) {
+      const stepPx = 3;
+      const fillPath = new Path2D();
+      fillPath.moveTo(0, neutralY);
+
+      for (let x = 0; x <= width; x += stepPx) {
+        const t = x / zoom;
+        const v = this.evaluateChannelCurve(activeChKey, t);
+        const y = valToY(v);
+        fillPath.lineTo(x, y);
+      }
+      fillPath.lineTo(width, neutralY);
+      fillPath.closePath();
+
+      const fillGrad = ctx.createLinearGradient(0, padTop, 0, height - padBottom);
+      fillGrad.addColorStop(0, activeCh.glow || 'rgba(245, 158, 11, 0.25)');
+      fillGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = fillGrad;
+      ctx.fill(fillPath);
+
+      ctx.beginPath();
+      ctx.strokeStyle = activeCh.color;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = activeCh.color;
+      ctx.shadowBlur = 8;
+
+      let first = true;
+      for (let x = 0; x <= width; x += stepPx) {
+        const t = x / zoom;
+        const v = this.evaluateChannelCurve(activeChKey, t);
+        const y = valToY(v);
+        if (first) {
+          ctx.moveTo(x, y);
+          first = false;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // 5. Render Keyframe Nodes & Tangent Handles
+    kfs.forEach((kf, idx) => {
+      const kfX = kf.time * zoom;
+      const kfY = valToY(kf.value);
+      const isSelected = (this.selectedCgKeyframe && this.selectedCgKeyframeIndex === idx);
+
+      if (isSelected) {
+        const inDt = kf.inHandle ? kf.inHandle.dt : -0.4;
+        const inDv = kf.inHandle ? kf.inHandle.dv : 0;
+        const inX = (kf.time + inDt) * zoom;
+        const inY = valToY(kf.value + inDv);
+
+        const outDt = kf.outHandle ? kf.outHandle.dt : 0.4;
+        const outDv = kf.outHandle ? kf.outHandle.dv : 0;
+        const outX = (kf.time + outDt) * zoom;
+        const outY = valToY(kf.value + outDv);
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
+
+        ctx.beginPath();
+        ctx.moveTo(inX, inY);
+        ctx.lineTo(kfX, kfY);
+        ctx.lineTo(outX, outY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(inX, inY, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(outX, outY, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      const size = isSelected ? 6.5 : 4.5;
+      ctx.save();
+      ctx.translate(kfX, kfY);
+      ctx.rotate(Math.PI / 4);
+
+      ctx.fillStyle = isSelected ? '#ffffff' : activeCh.color;
+      ctx.strokeStyle = isSelected ? activeCh.color : '#0f172a';
+      ctx.lineWidth = isSelected ? 2 : 1.5;
+      if (isSelected) {
+        ctx.shadowColor = activeCh.color;
+        ctx.shadowBlur = 10;
+      }
+
+      ctx.fillRect(-size / 2, -size / 2, size, size);
+      ctx.strokeRect(-size / 2, -size / 2, size, size);
+      ctx.restore();
+    });
+
+    // 6. Current Playhead Cursor
+    const curTime = this.getCurrentGlobalTimelineTime();
+    const curVal = this.evaluateChannelCurve(activeChKey, curTime);
+    const curX = curTime * zoom;
+    const curY = valToY(curVal);
+
+    ctx.beginPath();
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = activeCh.color;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 12;
+    ctx.arc(curX, curY, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  setupColorGradingCanvasInteractions() {
+    if (!this.cgGraphCanvas) return;
+    const canvas = this.cgGraphCanvas;
+
+    const getMouseTimelinePos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const zoom = this.timelineZoom || 95;
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const time = Math.max(0, x / zoom);
+
+      const activeChKey = this.colorGrading?.activeChannel || 'exposure';
+      const activeCh = this.colorGrading?.channels?.[activeChKey] || { min: -2, max: 2, defaultVal: 0 };
+      const valRange = Math.max(0.001, activeCh.max - activeCh.min);
+      const padTop = 16;
+      const graphH = 110 - 32;
+      const norm = 1.0 - (y - padTop) / graphH;
+      const val = Math.max(activeCh.min, Math.min(activeCh.max, activeCh.min + norm * valRange));
+
+      return { x, y, time, val, zoom, activeChKey, activeCh, valRange, padTop, graphH };
+    };
+
+    const valToY = (v, activeCh, padTop, graphH, valRange) => {
+      const norm = (v - activeCh.min) / valRange;
+      return padTop + (1.0 - norm) * graphH;
+    };
+
+    canvas.addEventListener('mousemove', (e) => {
+      const pos = getMouseTimelinePos(e);
+      const activeCh = pos.activeCh;
+      const kfs = activeCh.keyframes || [];
+
+      if (this.isDraggingCg && this.dragTarget) {
+        const dt = pos.time - this.dragTarget.startTime;
+        const dv = pos.val - this.dragTarget.startVal;
+
+        if (this.dragTarget.type === 'keyframe') {
+          const kf = this.dragTarget.keyframe;
+          let newTime = Math.max(0, this.dragTarget.origTime + dt);
+          if (!e.shiftKey) {
+            newTime = Math.round(newTime * 30) / 30; // 30fps snapping
+          }
+          kf.time = newTime;
+          kf.value = Math.max(activeCh.min, Math.min(activeCh.max, this.dragTarget.origVal + dv));
+
+          activeCh.keyframes.sort((a, b) => a.time - b.time);
+          this.selectedCgKeyframeIndex = activeCh.keyframes.indexOf(kf);
+        } else if (this.dragTarget.type === 'outHandle') {
+          const kf = this.dragTarget.keyframe;
+          kf.outHandle = kf.outHandle || { dt: 0.4, dv: 0 };
+          kf.outHandle.dt = Math.max(0.01, pos.time - kf.time);
+          kf.outHandle.dv = pos.val - kf.value;
+
+          if (!e.shiftKey) {
+            kf.inHandle = kf.inHandle || { dt: -0.4, dv: 0 };
+            kf.inHandle.dt = -kf.outHandle.dt;
+            kf.inHandle.dv = -kf.outHandle.dv;
+          }
+        } else if (this.dragTarget.type === 'inHandle') {
+          const kf = this.dragTarget.keyframe;
+          kf.inHandle = kf.inHandle || { dt: -0.4, dv: 0 };
+          kf.inHandle.dt = Math.min(-0.01, pos.time - kf.time);
+          kf.inHandle.dv = pos.val - kf.value;
+
+          if (!e.shiftKey) {
+            kf.outHandle = kf.outHandle || { dt: 0.4, dv: 0 };
+            kf.outHandle.dt = -kf.inHandle.dt;
+            kf.outHandle.dv = -kf.inHandle.dv;
+          }
+        }
+
+        this.applyColorGrading(this.getCurrentGlobalTimelineTime());
+        this.renderColorGradeGraph();
+        return;
+      }
+
+      let hoveredType = null;
+      if (this.selectedCgKeyframe && this.selectedCgKeyframeIndex >= 0) {
+        const kf = this.selectedCgKeyframe;
+        const inDt = kf.inHandle ? kf.inHandle.dt : -0.4;
+        const inDv = kf.inHandle ? kf.inHandle.dv : 0;
+        const inX = (kf.time + inDt) * pos.zoom;
+        const inY = valToY(kf.value + inDv, activeCh, pos.padTop, pos.graphH, pos.valRange);
+
+        const outDt = kf.outHandle ? kf.outHandle.dt : 0.4;
+        const outDv = kf.outHandle ? kf.outHandle.dv : 0;
+        const outX = (kf.time + outDt) * pos.zoom;
+        const outY = valToY(kf.value + outDv, activeCh, pos.padTop, pos.graphH, pos.valRange);
+
+        if (Math.hypot(pos.x - outX, pos.y - outY) < 9) {
+          hoveredType = 'outHandle';
+        } else if (Math.hypot(pos.x - inX, pos.y - inY) < 9) {
+          hoveredType = 'inHandle';
+        }
+      }
+
+      if (!hoveredType) {
+        for (let i = 0; i < kfs.length; i++) {
+          const kf = kfs[i];
+          const kfX = kf.time * pos.zoom;
+          const kfY = valToY(kf.value, activeCh, pos.padTop, pos.graphH, pos.valRange);
+          if (Math.hypot(pos.x - kfX, pos.y - kfY) < 9) {
+            hoveredType = 'keyframe';
+            break;
+          }
+        }
+      }
+
+      if (hoveredType === 'outHandle' || hoveredType === 'inHandle') {
+        canvas.style.cursor = 'grab';
+      } else if (hoveredType === 'keyframe') {
+        canvas.style.cursor = 'pointer';
+      } else {
+        canvas.style.cursor = 'crosshair';
+      }
+
+      if (this.cgTooltip) {
+        const frameNum = Math.round(pos.time * 30);
+        const evalVal = this.evaluateChannelCurve(pos.activeChKey, pos.time);
+        let valFormatted = evalVal.toFixed(2);
+        if (evalVal > 0) valFormatted = '+' + valFormatted;
+        if (activeCh.unit) valFormatted += ' ' + activeCh.unit;
+
+        this.cgTooltip.innerHTML = `<span class="tt-frame">F:${frameNum} (${this.formatSmpte(pos.time)})</span><span class="tt-val">${activeCh.name}: ${valFormatted}</span>`;
+        this.cgTooltip.classList.remove('hidden');
+        this.cgTooltip.style.left = `${pos.x}px`;
+        this.cgTooltip.style.top = `${pos.y}px`;
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      if (this.cgTooltip) this.cgTooltip.classList.add('hidden');
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+      const pos = getMouseTimelinePos(e);
+      const activeCh = pos.activeCh;
+      const kfs = activeCh.keyframes || [];
+
+      if (this.selectedCgKeyframe && this.selectedCgKeyframeIndex >= 0) {
+        const kf = this.selectedCgKeyframe;
+        const inDt = kf.inHandle ? kf.inHandle.dt : -0.4;
+        const inDv = kf.inHandle ? kf.inHandle.dv : 0;
+        const inX = (kf.time + inDt) * pos.zoom;
+        const inY = valToY(kf.value + inDv, activeCh, pos.padTop, pos.graphH, pos.valRange);
+
+        const outDt = kf.outHandle ? kf.outHandle.dt : 0.4;
+        const outDv = kf.outHandle ? kf.outHandle.dv : 0;
+        const outX = (kf.time + outDt) * pos.zoom;
+        const outY = valToY(kf.value + outDv, activeCh, pos.padTop, pos.graphH, pos.valRange);
+
+        if (Math.hypot(pos.x - outX, pos.y - outY) < 10) {
+          this.isDraggingCg = true;
+          this.dragTarget = { type: 'outHandle', keyframe: kf, startTime: pos.time, startVal: pos.val };
+          e.stopPropagation();
+          return;
+        } else if (Math.hypot(pos.x - inX, pos.y - inY) < 10) {
+          this.isDraggingCg = true;
+          this.dragTarget = { type: 'inHandle', keyframe: kf, startTime: pos.time, startVal: pos.val };
+          e.stopPropagation();
+          return;
+        }
+      }
+
+      let clickedKf = null;
+      let clickedIdx = -1;
+      for (let i = 0; i < kfs.length; i++) {
+        const kf = kfs[i];
+        const kfX = kf.time * pos.zoom;
+        const kfY = valToY(kf.value, activeCh, pos.padTop, pos.graphH, pos.valRange);
+        if (Math.hypot(pos.x - kfX, pos.y - kfY) < 10) {
+          clickedKf = kf;
+          clickedIdx = i;
+          break;
+        }
+      }
+
+      if (clickedKf) {
+        this.selectedCgKeyframe = clickedKf;
+        this.selectedCgKeyframeIndex = clickedIdx;
+        this.isDraggingCg = true;
+        this.dragTarget = {
+          type: 'keyframe',
+          keyframe: clickedKf,
+          startTime: pos.time,
+          startVal: pos.val,
+          origTime: clickedKf.time,
+          origVal: clickedKf.value
+        };
+        this.seekTimelineTo(clickedKf.time);
+        this.renderColorGradeGraph();
+        e.stopPropagation();
+        return;
+      }
+
+      this.selectedCgKeyframe = null;
+      this.selectedCgKeyframeIndex = -1;
+      this.seekTimelineTo(pos.time);
+      this.renderColorGradeGraph();
+    });
+
+    canvas.addEventListener('dblclick', (e) => {
+      const pos = getMouseTimelinePos(e);
+      this.addOrUpdateCgKeyframeAtTime(pos.time, pos.val);
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (this.isDraggingCg) {
+        this.isDraggingCg = false;
+        this.dragTarget = null;
+        this.saveProject();
+      }
+    });
+  }
+
+  addOrUpdateCgKeyframeAtTime(time, value = null) {
+    if (!this.colorGrading) return;
+    const activeChKey = this.colorGrading.activeChannel || 'exposure';
+    const ch = this.colorGrading.channels[activeChKey];
+    if (!ch) return;
+
+    ch.keyframes = ch.keyframes || [];
+    const frameSnappedTime = Math.round(time * 30) / 30;
+    const targetVal = (value !== null && value !== undefined) ? value : this.evaluateChannelCurve(activeChKey, frameSnappedTime);
+
+    let existing = ch.keyframes.find(k => Math.abs(k.time - frameSnappedTime) < 0.035);
+    if (existing) {
+      existing.value = Math.max(ch.min, Math.min(ch.max, targetVal));
+      this.selectedCgKeyframe = existing;
+      this.selectedCgKeyframeIndex = ch.keyframes.indexOf(existing);
+    } else {
+      const newKf = {
+        time: frameSnappedTime,
+        value: Math.max(ch.min, Math.min(ch.max, targetVal)),
+        inHandle: { dt: -0.4, dv: 0.0 },
+        outHandle: { dt: 0.4, dv: 0.0 },
+        interpolation: 'bezier'
+      };
+      ch.keyframes.push(newKf);
+      ch.keyframes.sort((a, b) => a.time - b.time);
+      this.selectedCgKeyframe = newKf;
+      this.selectedCgKeyframeIndex = ch.keyframes.indexOf(newKf);
+    }
+
+    this.applyColorGrading(frameSnappedTime);
+    this.renderColorGradeGraph();
+    this.saveProject();
+  }
+
+  jumpCgKeyframe(direction) {
+    if (!this.colorGrading) return;
+    const activeChKey = this.colorGrading.activeChannel || 'exposure';
+    const ch = this.colorGrading.channels[activeChKey];
+    if (!ch || !ch.keyframes || ch.keyframes.length === 0) return;
+
+    const curTime = this.getCurrentGlobalTimelineTime();
+    let targetKf = null;
+
+    if (direction < 0) {
+      for (let i = ch.keyframes.length - 1; i >= 0; i--) {
+        if (ch.keyframes[i].time < curTime - 0.04) {
+          targetKf = ch.keyframes[i];
+          break;
+        }
+      }
+    } else {
+      for (let i = 0; i < ch.keyframes.length; i++) {
+        if (ch.keyframes[i].time > curTime + 0.04) {
+          targetKf = ch.keyframes[i];
+          break;
+        }
+      }
+    }
+
+    if (targetKf) {
+      this.selectedCgKeyframe = targetKf;
+      this.selectedCgKeyframeIndex = ch.keyframes.indexOf(targetKf);
+      this.seekTimelineTo(targetKf.time);
+      this.renderColorGradeGraph();
+    }
+  }
+
+  deleteSelectedCgKeyframe() {
+    if (!this.selectedCgKeyframe || !this.colorGrading) return;
+    const activeChKey = this.colorGrading.activeChannel || 'exposure';
+    const ch = this.colorGrading.channels[activeChKey];
+    if (!ch || !ch.keyframes) return;
+
+    if (ch.keyframes.length <= 1) {
+      ch.keyframes[0].value = ch.defaultVal || 0;
+      ch.keyframes[0].time = 0;
+      ch.keyframes[0].inHandle = { dt: -0.4, dv: 0 };
+      ch.keyframes[0].outHandle = { dt: 0.4, dv: 0 };
+    } else {
+      ch.keyframes = ch.keyframes.filter(k => k !== this.selectedCgKeyframe);
+    }
+    this.selectedCgKeyframe = null;
+    this.selectedCgKeyframeIndex = -1;
+
+    this.applyColorGrading(this.getCurrentGlobalTimelineTime());
+    this.renderColorGradeGraph();
+    this.saveProject();
+  }
+
+  cycleCgPreset() {
+    if (!this.colorGrading) return;
+    const totalDur = this.getSequenceTotalDuration() || 10;
+    const presets = [
+      {
+        name: 'Cinematic Golden Hour',
+        apply: () => {
+          this.colorGrading.channels.exposure.keyframes = [
+            { time: 0, value: 0.15, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.8, dv: 0.15 } },
+            { time: Math.max(1.5, totalDur * 0.45), value: 0.45, inHandle: { dt: -0.8, dv: 0 }, outHandle: { dt: 0.8, dv: 0 } },
+            { time: Math.max(3, totalDur), value: 0.1, inHandle: { dt: -0.8, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.temperature.keyframes = [
+            { time: 0, value: 25, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 1.0, dv: 15 } },
+            { time: Math.max(1.5, totalDur * 0.45), value: 55, inHandle: { dt: -1.0, dv: 0 }, outHandle: { dt: 1.0, dv: 0 } },
+            { time: Math.max(3, totalDur), value: 20, inHandle: { dt: -1.0, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.saturation.keyframes = [
+            { time: 0, value: 0.15, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+        }
+      },
+      {
+        name: 'Teal & Orange / Cyberpunk',
+        apply: () => {
+          this.colorGrading.channels.contrast.keyframes = [
+            { time: 0, value: 0.3, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.temperature.keyframes = [
+            { time: 0, value: -35, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.8, dv: -15 } },
+            { time: Math.max(1.5, totalDur * 0.5), value: -55, inHandle: { dt: -0.8, dv: 0 }, outHandle: { dt: 0.8, dv: 0 } },
+            { time: Math.max(3, totalDur), value: -30, inHandle: { dt: -0.8, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.tint.keyframes = [
+            { time: 0, value: -15, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.saturation.keyframes = [
+            { time: 0, value: 0.25, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+        }
+      },
+      {
+        name: 'Bleach Bypass / Gritty War',
+        apply: () => {
+          this.colorGrading.channels.contrast.keyframes = [
+            { time: 0, value: 0.45, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.saturation.keyframes = [
+            { time: 0, value: -0.45, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.exposure.keyframes = [
+            { time: 0, value: -0.15, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.temperature.keyframes = [
+            { time: 0, value: -10, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+        }
+      },
+      {
+        name: 'Sunset Twilight Fade',
+        apply: () => {
+          this.colorGrading.channels.temperature.keyframes = [
+            { time: 0, value: 15, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 1.0, dv: 20 } },
+            { time: Math.max(1.5, totalDur * 0.5), value: 65, inHandle: { dt: -1.0, dv: 0 }, outHandle: { dt: 1.0, dv: 0 } },
+            { time: Math.max(3, totalDur), value: 30, inHandle: { dt: -1.0, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.tint.keyframes = [
+            { time: 0, value: 5, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 1.0, dv: 15 } },
+            { time: Math.max(1.5, totalDur * 0.5), value: 35, inHandle: { dt: -1.0, dv: 0 }, outHandle: { dt: 1.0, dv: 0 } },
+            { time: Math.max(3, totalDur), value: 10, inHandle: { dt: -1.0, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+          this.colorGrading.channels.contrast.keyframes = [
+            { time: 0, value: 0.2, inHandle: { dt: -0.5, dv: 0 }, outHandle: { dt: 0.5, dv: 0 } }
+          ];
+        }
+      },
+      {
+        name: 'Neutral Flat Baseline',
+        apply: () => {
+          Object.keys(this.colorGrading.channels).forEach(k => {
+            const ch = this.colorGrading.channels[k];
+            ch.keyframes = [{ time: 0, value: ch.defaultVal, inHandle: { dt: -0.4, dv: 0 }, outHandle: { dt: 0.4, dv: 0 } }];
+          });
+        }
+      }
+    ];
+
+    const idx = this.colorGradingPresetIndex % presets.length;
+    this.colorGradingPresetIndex++;
+    const chosen = presets[idx];
+    chosen.apply();
+
+    this.selectedCgKeyframe = null;
+    this.selectedCgKeyframeIndex = -1;
+    this.applyColorGrading(this.getCurrentGlobalTimelineTime());
+    this.renderColorGradeGraph();
+    this.saveProject();
+
+    if (this.btnCgPresets) {
+      this.btnCgPresets.title = `Applied Preset: ${chosen.name} (Click to cycle next look)`;
+    }
   }
 
   setupNleResizers() {

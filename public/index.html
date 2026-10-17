@@ -665,6 +665,17 @@
                 <img id="cinema-image-player" class="cinema-image-deck deck-a hidden" style="width:100%; height:100%; object-fit:contain;" alt="Animatic Preview">
                 <img id="cinema-image-player-b" class="cinema-image-deck deck-b hidden" style="width:100%; height:100%; object-fit:contain; opacity:0;" alt="Animatic Preview">
                 <div id="cinema-transition-flash" class="cinema-transition-flash" style="opacity:0; pointer-events:none;"></div>
+                <!-- SVG Filter Pipeline for Real-time Program Monitor Color Grading -->
+                <svg id="pb-colorgrade-svg" style="position:absolute; width:0; height:0; pointer-events:none; overflow:hidden;" aria-hidden="true">
+                  <filter id="pb-cg-filter" color-interpolation-filters="sRGB">
+                    <feColorMatrix id="pb-cg-matrix" type="matrix" values="
+                      1 0 0 0 0
+                      0 1 0 0 0
+                      0 0 1 0 0
+                      0 0 0 1 0
+                    " />
+                  </filter>
+                </svg>
                 <!-- Safe Area Overlay Grid (Toggleable) -->
                 <div class="safe-area-overlay hidden" id="safe-area-overlay">
                   <div class="safe-area-action"></div>
@@ -897,52 +908,96 @@
               <!-- Track Header Column (Fixed Left) -->
               <div class="nle-track-header-col">
                 <div class="nle-ruler-corner-header">
-                  <span style="font-family:var(--font-mono); font-size:0.62rem; color:var(--text-dim);">TIMECODE</span>
+                  <span style="font-family:var(--font-mono); font-size:0.62rem; color:var(--text-dim); letter-spacing:0.08em; font-weight:700;">TRACKS & TIMECODE</span>
                 </div>
                 <!-- V2 Video / Overlay Track Header -->
                 <div class="nle-track-header-cell v2-header">
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <span class="track-pill track-v track-v2">V2</span>
-                    <span class="track-name">Overlay</span>
-                  </div>
-                  <div class="track-icons">
-                    <button class="track-icon-btn" id="btn-toggle-v2-vis" title="Toggle Track Visibility">👁️</button>
-                    <button class="track-icon-btn" id="btn-toggle-v2-lock" title="Lock Track">🔒</button>
+                  <div class="track-header-row">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="track-pill track-v track-v2">V2</span>
+                      <span class="track-name">Overlay / B-Roll</span>
+                    </div>
+                    <div class="track-icons">
+                      <button class="track-icon-btn" id="btn-toggle-v2-vis" title="Toggle Track Visibility">👁️</button>
+                      <button class="track-icon-btn" id="btn-toggle-v2-lock" title="Lock Track">🔒</button>
+                    </div>
                   </div>
                 </div>
                 <!-- V1 Video / Main Track Header -->
                 <div class="nle-track-header-cell v1-header">
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <span class="track-pill track-v">V1</span>
-                    <span class="track-name">Base Video</span>
-                  </div>
-                  <div class="track-icons">
-                    <button class="track-icon-btn" id="btn-toggle-v1-vis" title="Toggle Track Visibility">👁️</button>
-                    <button class="track-icon-btn" id="btn-toggle-v1-lock" title="Lock Track">🔒</button>
+                  <div class="track-header-row">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="track-pill track-v">V1</span>
+                      <span class="track-name">Base Video (Main)</span>
+                    </div>
+                    <div class="track-icons">
+                      <button class="track-icon-btn" id="btn-toggle-v1-vis" title="Toggle Track Visibility">👁️</button>
+                      <button class="track-icon-btn" id="btn-toggle-v1-lock" title="Lock Track">🔒</button>
+                    </div>
                   </div>
                 </div>
                 <!-- A1 Audio Track Header (Dialogue) -->
                 <div class="nle-track-header-cell a1-header">
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <span class="track-pill track-a">A1</span>
-                    <span class="track-name">Dialogue</span>
-                  </div>
-                  <div class="track-icons">
-                    <button class="track-icon-btn audio-mute-btn" id="btn-toggle-a1-mute" title="Mute Audio (M)">M</button>
-                    <button class="track-icon-btn" id="btn-toggle-a1-solo" title="Solo Audio">S</button>
-                    <button class="track-icon-btn" id="btn-toggle-a1-lock" title="Lock Track">🔒</button>
+                  <div class="track-header-row">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="track-pill track-a">A1</span>
+                      <span class="track-name">Dialogue / Stems</span>
+                    </div>
+                    <div class="track-icons">
+                      <button class="track-icon-btn audio-mute-btn" id="btn-toggle-a1-mute" title="Mute Audio (M)">M</button>
+                      <button class="track-icon-btn" id="btn-toggle-a1-solo" title="Solo Audio">S</button>
+                      <button class="track-icon-btn" id="btn-toggle-a1-lock" title="Lock Track">🔒</button>
+                    </div>
                   </div>
                 </div>
                 <!-- A2 Audio Track Header (SFX & Music) -->
                 <div class="nle-track-header-cell a2-header">
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <span class="track-pill track-a track-a2">A2</span>
-                    <span class="track-name">SFX / Music</span>
+                  <div class="track-header-row">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="track-pill track-a track-a2">A2</span>
+                      <span class="track-name">SFX & Music Bed</span>
+                    </div>
+                    <div class="track-icons">
+                      <button class="track-icon-btn audio-mute-btn" id="btn-toggle-a2-mute" title="Mute Audio">M</button>
+                      <button class="track-icon-btn" id="btn-toggle-a2-solo" title="Solo Audio">S</button>
+                      <button class="track-icon-btn" id="btn-toggle-a2-lock" title="Lock Track">🔒</button>
+                    </div>
                   </div>
-                  <div class="track-icons">
-                    <button class="track-icon-btn audio-mute-btn" id="btn-toggle-a2-mute" title="Mute Audio">M</button>
-                    <button class="track-icon-btn" id="btn-toggle-a2-solo" title="Solo Audio">S</button>
-                    <button class="track-icon-btn" id="btn-toggle-a2-lock" title="Lock Track">🔒</button>
+                </div>
+
+                <!-- CG Color Grading Track Header -->
+                <div class="nle-track-header-cell cg-header" id="nle-cg-header">
+                  <div class="cg-header-top">
+                    <div style="display:flex; align-items:center; gap:7px;">
+                      <span class="track-pill track-cg">CG</span>
+                      <span class="track-name">Color Grade Graph</span>
+                      <span class="cg-status-badge active" id="cg-status-badge">Live</span>
+                    </div>
+                    <div class="track-icons">
+                      <button class="track-icon-btn active" id="btn-toggle-cg-vis" title="Toggle Live Color Grading (On/Bypass)">👁️</button>
+                      <button class="track-icon-btn" id="btn-reset-cg-channel" title="Reset Current Channel Curve">↺</button>
+                    </div>
+                  </div>
+                  <!-- Channel Selector & Presets -->
+                  <div class="cg-channel-row">
+                    <select id="cg-channel-select" class="cg-channel-select" title="Active Color Grading Curve Channel">
+                      <option value="exposure">☀️ Exposure (EV)</option>
+                      <option value="contrast">🌓 Contrast</option>
+                      <option value="saturation">🎨 Saturation</option>
+                      <option value="temperature">🌡️ Temp (Warm/Cool)</option>
+                      <option value="tint">🌸 Tint (Green/Magenta)</option>
+                    </select>
+                    <button class="cg-preset-btn" id="btn-cg-presets" title="Cycle Curated Color Looks">⚡ Presets</button>
+                  </div>
+                  <!-- Keyframe controls and live value readout -->
+                  <div class="cg-keyframe-bar">
+                    <div class="cg-value-pill" id="cg-value-display">0.00 EV</div>
+                    <div class="cg-key-actions">
+                      <button class="cg-key-btn" id="btn-cg-prev-key" title="Jump to previous keyframe ( [ )">◀ Prev</button>
+                      <button class="cg-key-btn key-add" id="btn-cg-add-key" title="Add / Update Keyframe at Playhead (K)">◆ +Key</button>
+                      <button class="cg-key-btn" id="btn-cg-next-key" title="Jump to next keyframe ( ] )">Next ▶</button>
+                      <button class="cg-key-btn key-del" id="btn-cg-del-key" title="Delete selected keyframe (Del)">✕</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -984,6 +1039,12 @@
                   <!-- Audio Lane (A2 SFX / Music) -->
                   <div class="nle-track-lane nle-lane-audio nle-lane-a2" id="timeline-track-a2" data-track="a2">
                     <!-- Secondary SFX & music audio stems -->
+                  </div>
+
+                  <!-- Color Grade Graph Lane -->
+                  <div class="nle-track-lane nle-lane-colorgrade" id="timeline-track-colorgrade" data-track="cg">
+                    <canvas id="colorgrade-graph-canvas" class="colorgrade-graph-canvas"></canvas>
+                    <div id="colorgrade-tooltip" class="colorgrade-tooltip hidden"></div>
                   </div>
                 </div>
 
