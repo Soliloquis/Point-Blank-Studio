@@ -2405,16 +2405,21 @@ app.post('/api/storyboard/:shotId/layers/import', keyframeUpload.single('layerFi
   try {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
     const { shotId } = req.params;
+    const targetFrame = req.body?.targetFrame || req.query?.targetFrame || 'start';
+    const isEnd = targetFrame === 'end';
     const project = getProject();
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
     if (!Array.isArray(shot.layers)) shot.layers = [];
+    if (!Array.isArray(shot.endLayers)) shot.endLayers = [];
+    const targetList = isEnd ? shot.endLayers : shot.layers;
+
     const ts = Date.now();
     const layerName = path.basename(req.file.originalname, path.extname(req.file.originalname)) || 'Imported Layer';
 
     const newLayer = {
-      id: `layer_imported_${ts}`,
+      id: `layer_imported_${isEnd ? 'end_' : 'start_'}${ts}`,
       assetId: null,
       assetName: layerName,
       category: 'custom',
@@ -2430,14 +2435,14 @@ app.post('/api/storyboard/:shotId/layers/import', keyframeUpload.single('layerFi
       ],
       opacity: 1.0,
       visible: true,
-      zIndex: shot.layers.length + 1,
+      zIndex: targetList.length + 1,
       blendMode: 'normal'
     };
 
-    shot.layers.push(newLayer);
+    targetList.push(newLayer);
     saveProject(project);
 
-    res.json({ success: true, layer: newLayer });
+    res.json({ success: true, layer: newLayer, layers: targetList });
   } catch (err) {
     console.error('Layer import error:', err);
     res.status(500).json({ error: err.message });
@@ -2452,16 +2457,15 @@ app.post('/api/storyboard/:shotId/layers/:layerId/duplicate', (req, res) => {
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-    if (!Array.isArray(shot.layers)) shot.layers = [];
     const { layer, list: layerList, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
-    if (!layer) return res.status(404).json({ error: 'Layer not found' });
+    if (!layer || !layerList) return res.status(404).json({ error: 'Layer not found' });
     if (layer.isBackground) return res.status(400).json({ error: 'Cannot duplicate background layer' });
 
     const ts = Date.now();
     const cloned = JSON.parse(JSON.stringify(layer));
     cloned.id = `layer_copy_${ts}_${Math.floor(Math.random() * 1000)}`;
     cloned.assetName = `${layer.assetName || 'Layer'} (Copy)`;
-    cloned.zIndex = shot.layers.length + 1;
+    cloned.zIndex = layerList.length + 1;
     cloned.visible = true;
 
     if (Array.isArray(cloned.quad)) {
@@ -2472,10 +2476,10 @@ app.post('/api/storyboard/:shotId/layers/:layerId/duplicate', (req, res) => {
       }));
     }
 
-    shot.layers.push(cloned);
+    layerList.push(cloned);
     saveProject(project);
 
-    res.json({ success: true, layer: cloned, layers: shot.layers });
+    res.json({ success: true, layer: cloned, layers: layerList });
   } catch (err) {
     console.error('Layer duplicate error:', err);
     res.status(500).json({ error: err.message });
@@ -2490,22 +2494,26 @@ app.delete('/api/storyboard/:shotId/layers/:layerId', (req, res) => {
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-    if (!Array.isArray(shot.layers)) shot.layers = [];
-    const idx = shot.layers.findIndex(l => l.id === layerId);
+    const { layer, list: layerList, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
+    if (!layer || !layerList) return res.status(404).json({ error: 'Layer not found' });
+
+    if (layer.isBackground) {
+      return res.status(400).json({ error: 'Cannot delete the background layer' });
+    }
+
+    const idx = layerList.findIndex(l => l.id === layerId);
     if (idx !== -1) {
-      if (shot.layers[idx].isBackground) {
-        return res.status(400).json({ error: 'Cannot delete the background layer' });
-      }
-      shot.layers.splice(idx, 1);
+      layerList.splice(idx, 1);
       saveProject(project);
     }
 
-    res.json({ success: true, layers: shot.layers });
+    res.json({ success: true, layers: layerList });
   } catch (err) {
     console.error('Layer delete error:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
 // Update or rename a specific layer in a shot's layer stack
 app.patch('/api/storyboard/:shotId/layers/:layerId', (req, res) => {
   try {
@@ -2515,7 +2523,6 @@ app.patch('/api/storyboard/:shotId/layers/:layerId', (req, res) => {
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-    if (!Array.isArray(shot.layers)) shot.layers = [];
     const { layer, list: layerList, isEnd: isLayerEnd } = findShotLayer(shot, layerId);
     if (!layer) return res.status(404).json({ error: 'Layer not found' });
 
@@ -2533,7 +2540,7 @@ app.patch('/api/storyboard/:shotId/layers/:layerId', (req, res) => {
     }
 
     saveProject(project);
-    res.json({ success: true, layer, layers: shot.layers });
+    res.json({ success: true, layer, layers: layerList || shot.layers });
   } catch (err) {
     console.error('Layer update error:', err);
     res.status(500).json({ error: err.message });
@@ -2544,15 +2551,17 @@ app.patch('/api/storyboard/:shotId/layers/:layerId', (req, res) => {
 app.post('/api/storyboard/:shotId/layers/reorder', (req, res) => {
   try {
     const { shotId } = req.params;
-    const { orderedLayerIds } = req.body; // Array of layer IDs from top (highest zIndex) to bottom
+    const { orderedLayerIds, targetFrame = 'start' } = req.body;
+    const isEnd = targetFrame === 'end';
     const project = getProject();
     const shot = (project.storyboard || []).find((s) => s.id === shotId);
     if (!shot) return res.status(404).json({ error: 'Shot not found' });
 
-    if (Array.isArray(orderedLayerIds) && Array.isArray(shot.layers)) {
-      const bg = shot.layers.find(l => l.isBackground);
+    const targetList = isEnd ? (shot.endLayers = shot.endLayers || []) : (shot.layers = shot.layers || []);
+    if (Array.isArray(orderedLayerIds) && Array.isArray(targetList)) {
+      const bg = targetList.find(l => l.isBackground);
       const fgMap = new Map();
-      shot.layers.filter(l => !l.isBackground).forEach(l => fgMap.set(l.id, l));
+      targetList.filter(l => !l.isBackground).forEach(l => fgMap.set(l.id, l));
 
       const newFg = [];
       orderedLayerIds.forEach(id => {
@@ -2569,11 +2578,17 @@ app.post('/api/storyboard/:shotId/layers/reorder', (req, res) => {
       });
       if (bg) bg.zIndex = 0;
 
-      shot.layers = bg ? [bg, ...newFg] : newFg;
+      const updated = bg ? [bg, ...newFg] : newFg;
+      if (isEnd) {
+        shot.endLayers = updated;
+      } else {
+        shot.layers = updated;
+      }
       saveProject(project);
+      return res.json({ success: true, layers: updated });
     }
 
-    res.json({ success: true, layers: shot.layers });
+    res.json({ success: true, layers: targetList });
   } catch (err) {
     console.error('Layer reorder error:', err);
     res.status(500).json({ error: err.message });

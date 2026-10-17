@@ -2514,7 +2514,7 @@ class StudioApp {
     const label = isEnd ? 'END FRAME' : 'START FRAME';
     const spatialUrl = isEnd ? shot.endKeyframeUrl : shot.keyframeUrl;
     const colorUrl = isEnd ? shot.endColorFrameUrl : shot.colorFrameUrl;
-    const layers = isEnd ? (shot.endLayers || shot.layers || []) : (shot.layers || []);
+    const layers = isEnd ? (shot.endLayers || []) : (shot.layers || []);
     const compOutUrl = isEnd ? (shot.compositeEndKeyframeUrl || shot.stage2EndImageUrl) : (shot.compositeKeyframeUrl || shot.stage2ImageUrl);
     const restyleUrl = isEnd ? shot.styledEndKeyframeUrl : shot.styledKeyframeUrl;
     const isOutdated = !isEnd && Boolean(shot.styledAt && (
@@ -7859,7 +7859,7 @@ class StudioApp {
         const activeItemName = this.layerStackList?.querySelector(`.layer-item.active .layer-item-name`);
         if (activeItemName) activeItemName.textContent = e.target.value || 'Layer';
         if (this.activeStudioShot) {
-          this.activeStudioShot.layers = this.studioLayers;
+          this.syncActiveStudioLayersToShot();
           this.saveProject();
         }
       }
@@ -7953,6 +7953,15 @@ class StudioApp {
     }
   }
 
+  syncActiveStudioLayersToShot() {
+    if (!this.activeStudioShot) return;
+    if (this.activeStudioTargetFrame === 'end') {
+      this.activeStudioShot.endLayers = this.studioLayers;
+    } else {
+      this.activeStudioShot.layers = this.studioLayers;
+    }
+  }
+
   async openLayeredRestyleStudio(shot, targetFrame = 'start') {
     if (!shot) return;
     this.activeStudioShot = shot;
@@ -7970,6 +7979,18 @@ class StudioApp {
       this.layerStudioSubtitle.textContent = shot.description || `Decomposed Consistent Asset Layers with 4-Corner Perspective Pin (${frameStudioLabel})`;
     }
 
+    // Reset overlay and canvas state before loading new frame
+    this.studioGhostImage = null;
+    this.studioMarkupImage = null;
+    if (this.layerCompositeCanvas) {
+      const ctx = this.layerCompositeCanvas.getContext('2d');
+      ctx.clearRect(0, 0, this.layerCompositeCanvas.width, this.layerCompositeCanvas.height);
+    }
+    if (this.layerInteractionCanvas) {
+      const ctx = this.layerInteractionCanvas.getContext('2d');
+      ctx.clearRect(0, 0, this.layerInteractionCanvas.width, this.layerInteractionCanvas.height);
+    }
+
     const ghostUrl = isEndStudio ? (shot.endKeyframeUrl || shot.keyframeUrl) : shot.keyframeUrl;
     if (ghostUrl) {
       const ghostImg = new Image();
@@ -7979,8 +8000,6 @@ class StudioApp {
         this.studioGhostImage = ghostImg;
         this.renderCompositeCanvas();
       };
-    } else {
-      this.studioGhostImage = null;
     }
 
     const markupUrl = isEndStudio ? (shot.endMarkupUrl || shot.endFlattenedMarkupUrl) : (shot.startMarkupUrl || shot.startFlattenedMarkupUrl);
@@ -7992,13 +8011,35 @@ class StudioApp {
         this.studioMarkupImage = markupImg;
         this.renderCompositeCanvas();
       };
-    } else {
-      this.studioMarkupImage = null;
     }
 
     this.layeredRestyleModal?.classList.remove('hidden');
 
-    const studioLayersSource = isEndStudio ? shot.endLayers : shot.layers;
+    let studioLayersSource = isEndStudio ? shot.endLayers : shot.layers;
+
+    // Detect and heal cross-contamination where end layers were saved into start layers (or vice versa)
+    if (studioLayersSource && Array.isArray(studioLayersSource) && studioLayersSource.length > 0) {
+      const bg = studioLayersSource.find(l => l.isBackground);
+      const isContaminated = bg ? (
+        isEndStudio ? (bg.id?.endsWith('_start') || bg.imageUrl?.includes('_start_'))
+                    : (bg.id?.endsWith('_end') || bg.imageUrl?.includes('_end_'))
+      ) : false;
+
+      if (isContaminated) {
+        console.warn(`[LayerStudio] Cross-contamination detected: ${isEndStudio ? 'endLayers' : 'layers'} contained ${isEndStudio ? 'start' : 'end'} background. Healing stack.`);
+        if (!isEndStudio && (!shot.endLayers || shot.endLayers.length === 0)) {
+          shot.endLayers = shot.layers;
+        }
+        if (isEndStudio) {
+          shot.endLayers = [];
+        } else {
+          shot.layers = [];
+        }
+        this.saveProject();
+        studioLayersSource = isEndStudio ? shot.endLayers : shot.layers;
+      }
+    }
+
     if (studioLayersSource && Array.isArray(studioLayersSource) && studioLayersSource.length > 0) {
       this.studioLayers = JSON.parse(JSON.stringify(studioLayersSource));
       await this.preloadStudioImages();
@@ -8014,6 +8055,17 @@ class StudioApp {
     this.activeStudioShot = null;
     this.studioLayers = [];
     this.selectedLayerId = null;
+    this.studioGhostImage = null;
+    this.studioMarkupImage = null;
+    this.activeStudioTargetFrame = 'start';
+    if (this.layerCompositeCanvas) {
+      const ctx = this.layerCompositeCanvas.getContext('2d');
+      ctx.clearRect(0, 0, this.layerCompositeCanvas.width, this.layerCompositeCanvas.height);
+    }
+    if (this.layerInteractionCanvas) {
+      const ctx = this.layerInteractionCanvas.getContext('2d');
+      ctx.clearRect(0, 0, this.layerInteractionCanvas.width, this.layerInteractionCanvas.height);
+    }
   }
 
   async extractShotLayers(shot, force = false) {
@@ -8375,7 +8427,7 @@ class StudioApp {
 
     this.studioLayers = bg ? [bg, ...fg] : fg;
     if (this.activeStudioShot) {
-      this.activeStudioShot.layers = this.studioLayers;
+      this.syncActiveStudioLayersToShot();
       this.saveProject();
     }
   }
@@ -8416,7 +8468,7 @@ class StudioApp {
 
     this.studioLayers = bg ? [bg, ...fg] : fg;
     if (this.activeStudioShot) {
-      this.activeStudioShot.layers = this.studioLayers;
+      this.syncActiveStudioLayersToShot();
       this.saveProject();
     }
 
@@ -8463,7 +8515,7 @@ class StudioApp {
 
     this.studioLayers = bg ? [bg, ...fg] : fg;
     if (this.activeStudioShot) {
-      this.activeStudioShot.layers = this.studioLayers;
+      this.syncActiveStudioLayersToShot();
       this.saveProject();
     }
 
@@ -8481,7 +8533,7 @@ class StudioApp {
     layer.assetName = trimmed || 'Layer';
 
     if (this.activeStudioShot) {
-      this.activeStudioShot.layers = this.studioLayers;
+      this.syncActiveStudioLayersToShot();
       this.saveProject();
     }
 
@@ -8573,6 +8625,7 @@ class StudioApp {
     try {
       const formData = new FormData();
       formData.append('layerFile', file);
+      formData.append('targetFrame', this.activeStudioTargetFrame || 'start');
 
       const res = await fetch(`/api/storyboard/${this.activeStudioShot.id}/layers/import`, {
         method: 'POST',
@@ -8602,6 +8655,7 @@ class StudioApp {
       this.renderLayerStack();
       this.renderCompositeCanvas();
       this.renderInteractionCanvas();
+      this.syncActiveStudioLayersToShot();
       this.saveProject();
     } catch (err) {
       alert('Import layer error: ' + err.message);
@@ -8646,6 +8700,7 @@ class StudioApp {
     this.renderLayerStack();
     this.renderCompositeCanvas();
     this.renderInteractionCanvas();
+    this.syncActiveStudioLayersToShot();
     this.saveProject();
   }
 
@@ -8661,7 +8716,7 @@ class StudioApp {
       this.studioLayers.splice(idx, 1);
       this.normalizeLayerZIndices();
     }
-    this.activeStudioShot.layers = this.studioLayers;
+    this.syncActiveStudioLayersToShot();
 
     if (this.selectedLayerId === layerId) {
       const nextLayer = this.studioLayers.find(l => !l.isBackground) || this.studioLayers[0];
@@ -9029,7 +9084,7 @@ class StudioApp {
     if (this.studioActiveDrag) {
       this.studioActiveDrag = null;
       if (this.activeStudioShot) {
-        this.activeStudioShot.layers = this.studioLayers;
+        this.syncActiveStudioLayersToShot();
         this.saveProject();
       }
     }
@@ -9046,6 +9101,7 @@ class StudioApp {
     ];
     this.renderCompositeCanvas();
     this.renderInteractionCanvas();
+    this.syncActiveStudioLayersToShot();
     this.saveProject();
   }
 
@@ -9062,6 +9118,7 @@ class StudioApp {
     });
     this.renderCompositeCanvas();
     this.renderInteractionCanvas();
+    this.syncActiveStudioLayersToShot();
     this.saveProject();
   }
 
@@ -9078,6 +9135,7 @@ class StudioApp {
     }));
     this.renderCompositeCanvas();
     this.renderInteractionCanvas();
+    this.syncActiveStudioLayersToShot();
     this.saveProject();
   }
 
@@ -9172,6 +9230,7 @@ class StudioApp {
       this.updateSelectedLayerInspector();
       this.renderCompositeCanvas();
       this.renderInteractionCanvas();
+      this.syncActiveStudioLayersToShot();
       this.saveProject();
     } catch (err) {
       alert('Asset generation error: ' + err.message);
@@ -9217,6 +9276,7 @@ class StudioApp {
       this.updateSelectedLayerInspector();
       this.renderCompositeCanvas();
       this.renderInteractionCanvas();
+      this.syncActiveStudioLayersToShot();
       this.saveProject();
     } catch (err) {
       alert('Canonical sprite error: ' + err.message);
