@@ -180,6 +180,167 @@ async function inspectMediaStreams(filePath) {
   }
 }
 
+// Evaluate a cubic bezier color grading channel curve at a specific timeline timestamp
+function evaluateCgChannelCurve(ch, time) {
+  if (!ch || !ch.keyframes || ch.keyframes.length === 0) return Number(ch?.defaultVal || 0);
+
+  const kfs = ch.keyframes;
+  if (kfs.length === 1) return Number(kfs[0].value || 0);
+  if (time <= kfs[0].time) return Number(kfs[0].value || 0);
+  if (time >= kfs[kfs.length - 1].time) return Number(kfs[kfs.length - 1].value || 0);
+
+  let i = 0;
+  while (i < kfs.length - 1 && kfs[i + 1].time < time) {
+    i++;
+  }
+  const k0 = kfs[i];
+  const k1 = kfs[i + 1];
+
+  if (k0.interpolation === 'hold') return Number(k0.value || 0);
+  if (k0.interpolation === 'linear') {
+    const span = Math.max(0.0001, k1.time - k0.time);
+    const alpha = Math.min(1, Math.max(0, (time - k0.time) / span));
+    return Number(k0.value) + alpha * (Number(k1.value) - Number(k0.value));
+  }
+
+  // Cubic Bezier evaluation matching NLE graph
+  const p0x = k0.time;
+  const p0y = Number(k0.value || 0);
+  const p3x = k1.time;
+  const p3y = Number(k1.value || 0);
+
+  const outDt = Math.max(0, k0.outHandle ? k0.outHandle.dt : (p3x - p0x) * 0.35);
+  const outDv = k0.outHandle ? Number(k0.outHandle.dv || 0) : 0;
+  const p1x = Math.max(p0x, Math.min(p3x, p0x + outDt));
+  const p1y = p0y + outDv;
+
+  const inDt = Math.min(0, k1.inHandle ? k1.inHandle.dt : -(p3x - p0x) * 0.35);
+  const inDv = k1.inHandle ? Number(k1.inHandle.dv || 0) : 0;
+  const p2x = Math.max(p0x, Math.min(p3x, p3x + inDt));
+  const p2y = p3y + inDv;
+
+  let lo = 0, hi = 1, u = 0.5;
+  for (let iter = 0; iter < 18; iter++) {
+    u = (lo + hi) * 0.5;
+    const inv = 1 - u;
+    const curX = inv * inv * inv * p0x + 3 * inv * inv * u * p1x + 3 * inv * u * u * p2x + u * u * u * p3x;
+    if (curX < time) lo = u;
+    else hi = u;
+  }
+
+  const inv = 1 - u;
+  const curY = inv * inv * inv * p0y + 3 * inv * inv * u * p1y + 3 * inv * u * u * p2y + u * u * u * p3y;
+  const min = ch.min !== undefined ? ch.min : -100;
+  const max = ch.max !== undefined ? ch.max : 100;
+  return Math.max(min, Math.min(max, curY));
+}
+
+// Evaluate 5 color channels (exposure, contrast, saturation, temperature, tint) at global timeline time
+function evaluateColorGradeAtTime(colorGrading, time) {
+  if (!colorGrading || colorGrading.enabled === false || !colorGrading.channels) {
+    return { exp: 0, cont: 0, sat: 0, temp: 0, tint: 0 };
+  }
+  const chs = colorGrading.channels;
+  return {
+    exp: evaluateCgChannelCurve(chs.exposure, time),
+    cont: evaluateCgChannelCurve(chs.contrast, time),
+    sat: evaluateCgChannelCurve(chs.saturation, time),
+    temp: evaluateCgChannelCurve(chs.temperature, time),
+    tint: evaluateCgChannelCurve(chs.tint, time)
+  };
+}
+
+// Convert evaluated channel values into FFmpeg filters (exposure, eq, colorchannelmixer)
+function buildColorGradeFilterSnippet(cg, timeRange) {
+  const { exp, cont, sat, temp, tint } = cg;
+  const parts = [];
+  const enableStr = timeRange ? `:enable='between(t,${timeRange[0].toFixed(3)},${timeRange[1].toFixed(3)})'` : '';
+
+  if (Math.abs(exp) > 0.005) {
+    parts.push(`exposure=exposure=${exp.toFixed(3)}${enableStr}`);
+  }
+  if (Math.abs(cont) > 0.005 || Math.abs(sat) > 0.005) {
+    const contrastFactor = Math.max(0.1, Math.min(3.0, 1.0 + cont));
+    const saturationFactor = Math.max(0.0, Math.min(3.0, 1.0 + sat));
+    parts.push(`eq=contrast=${contrastFactor.toFixed(3)}:saturation=${saturationFactor.toFixed(3)}${enableStr}`);
+  }
+  if (Math.abs(temp) > 0.2 || Math.abs(tint) > 0.2) {
+    const tNorm = Math.max(-1, Math.min(1, temp / 100));
+    const tintNorm = Math.max(-1, Math.min(1, tint / 100));
+
+    let rR = 1.0, rG = 0.0, rB = 0.0;
+    let gR = 0.0, gG = 1.0, gB = 0.0;
+    let bR = 0.0, bG = 0.0, bB = 1.0;
+
+    if (tNorm > 0) {
+      rR += tNorm * 0.28;
+      gG += tNorm * 0.06;
+      bB -= tNorm * 0.24;
+    } else if (tNorm < 0) {
+      const cool = Math.abs(tNorm);
+      bB += cool * 0.28;
+      rR -= cool * 0.22;
+      gG -= cool * 0.05;
+    }
+
+    if (tintNorm > 0) {
+      gG += tintNorm * 0.25;
+      rR -= tintNorm * 0.12;
+      bB -= tintNorm * 0.12;
+    } else if (tintNorm < 0) {
+      const mag = Math.abs(tintNorm);
+      rR += mag * 0.20;
+      bB += mag * 0.22;
+      gG -= mag * 0.22;
+    }
+
+    parts.push(`colorchannelmixer=rr=${rR.toFixed(3)}:rg=${rG.toFixed(3)}:rb=${rB.toFixed(3)}:gr=${gR.toFixed(3)}:gg=${gG.toFixed(3)}:gb=${gB.toFixed(3)}:br=${bR.toFixed(3)}:bg=${bG.toFixed(3)}:bb=${bB.toFixed(3)}${enableStr}`);
+  }
+
+  return parts.join(',');
+}
+
+// Generate the color grading filter chain for a clip based on its timeline placement and duration
+function buildClipColorGradingFilter(colorGrading, clipGlobalStart, clipDuration) {
+  if (!colorGrading || colorGrading.enabled === false || !colorGrading.channels) {
+    return '';
+  }
+  const dur = Math.max(0.1, Number(clipDuration) || 0);
+  const start = Math.max(0, Number(clipGlobalStart) || 0);
+  const end = start + dur;
+
+  const s0 = evaluateColorGradeAtTime(colorGrading, start);
+  const sm = evaluateColorGradeAtTime(colorGrading, start + dur * 0.5);
+  const s1 = evaluateColorGradeAtTime(colorGrading, end);
+
+  const isVarying =
+    Math.abs(s0.exp - s1.exp) > 0.05 ||
+    Math.abs(s0.cont - s1.cont) > 0.05 ||
+    Math.abs(s0.sat - s1.sat) > 0.05 ||
+    Math.abs(s0.temp - s1.temp) > 2.0 ||
+    Math.abs(s0.tint - s1.tint) > 2.0 ||
+    Math.abs(s0.exp - sm.exp) > 0.05 ||
+    Math.abs(s0.cont - sm.cont) > 0.05;
+
+  if (!isVarying) {
+    return buildColorGradeFilterSnippet(sm, null);
+  }
+
+  const step = dur <= 1.0 ? 0.2 : 0.5;
+  const filterSegments = [];
+  for (let localT = 0; localT < dur; localT += step) {
+    const localEnd = Math.min(dur, localT + step);
+    const midGlobalT = start + (localT + localEnd) * 0.5;
+    const cgStep = evaluateColorGradeAtTime(colorGrading, midGlobalT);
+    const snip = buildColorGradeFilterSnippet(cgStep, [localT, localEnd]);
+    if (snip) {
+      filterSegments.push(snip);
+    }
+  }
+
+  return filterSegments.join(',');
+}
+
 // Stitch timeline clips together into a long-format video with transitions and multi-track audio
 async function stitchTimelineClips({
   clips,
@@ -187,7 +348,8 @@ async function stitchTimelineClips({
   transitions = [],
   outputPath,
   audioPath,
-  targetResolution = '1280x720'
+  targetResolution = '1280x720',
+  colorGrading = null
 }) {
   if (!clips || clips.length === 0) {
     throw new Error('No video or visual clips provided to stitch');
@@ -199,6 +361,7 @@ async function stitchTimelineClips({
   try {
     const normalizedClips = [];
     const clipDurations = [];
+    let accumulatedTimelineTime = 0;
 
     // Pre-process and normalize each visual clip with uniform framerate, resolution, and stereo audio
     for (let i = 0; i < clips.length; i++) {
@@ -246,8 +409,17 @@ async function stitchTimelineClips({
         args.push('-t', `${trimDuration}`);
       }
 
+      const clipGlobalStart = clip.trackStart !== undefined ? Number(clip.trackStart) : (clip.globalStart !== undefined ? Number(clip.globalStart) : accumulatedTimelineTime);
+      accumulatedTimelineTime = clipGlobalStart + trimDuration;
+
       const [w, h] = targetResolution.split('x');
-      const vf = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,format=yuv420p`;
+      let vf = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30`;
+
+      const cgFilter = buildClipColorGradingFilter(colorGrading, clipGlobalStart, trimDuration);
+      if (cgFilter) {
+        vf += `,${cgFilter}`;
+      }
+      vf += `,format=yuv420p`;
 
       if (hasCustomAudio) {
         args.push(
@@ -688,5 +860,7 @@ module.exports = {
   extractKeyframes,
   sampleVideoFrames,
   extractSingleKeyframe,
-  extractLastFrame
+  extractLastFrame,
+  evaluateColorGradeAtTime,
+  buildClipColorGradingFilter
 };

@@ -352,6 +352,72 @@ const defaultProject = {
     characters: [],
     props: [],
     places: []
+  },
+  colorGrading: {
+    enabled: true,
+    activeChannel: 'exposure',
+    channels: {
+      exposure: {
+        name: 'Exposure',
+        unit: 'EV',
+        min: -2.0,
+        max: 2.0,
+        defaultVal: 0.0,
+        color: '#f59e0b',
+        glow: 'rgba(245, 158, 11, 0.35)',
+        keyframes: [
+          { time: 0.0, value: 0.0, inHandle: { dt: -0.4, dv: 0.0 }, outHandle: { dt: 0.4, dv: 0.0 }, interpolation: 'bezier' }
+        ]
+      },
+      contrast: {
+        name: 'Contrast',
+        unit: '',
+        min: -0.8,
+        max: 0.8,
+        defaultVal: 0.0,
+        color: '#06b6d4',
+        glow: 'rgba(6, 182, 212, 0.35)',
+        keyframes: [
+          { time: 0.0, value: 0.0, inHandle: { dt: -0.4, dv: 0.0 }, outHandle: { dt: 0.4, dv: 0.0 }, interpolation: 'bezier' }
+        ]
+      },
+      saturation: {
+        name: 'Saturation',
+        unit: '',
+        min: -1.0,
+        max: 1.0,
+        defaultVal: 0.0,
+        color: '#ec4899',
+        glow: 'rgba(236, 72, 153, 0.35)',
+        keyframes: [
+          { time: 0.0, value: 0.0, inHandle: { dt: -0.4, dv: 0.0 }, outHandle: { dt: 0.4, dv: 0.0 }, interpolation: 'bezier' }
+        ]
+      },
+      temperature: {
+        name: 'Temperature',
+        unit: 'K',
+        min: -100,
+        max: 100,
+        defaultVal: 0,
+        color: '#f97316',
+        glow: 'rgba(249, 115, 22, 0.35)',
+        keyframes: [
+          { time: 0.0, value: 0, inHandle: { dt: -0.4, dv: 0 }, outHandle: { dt: 0.4, dv: 0 }, interpolation: 'bezier' }
+        ]
+      },
+      tint: {
+        name: 'Tint',
+        unit: '',
+        min: -100,
+        max: 100,
+        defaultVal: 0,
+        color: '#10b981',
+        glow: 'rgba(16, 185, 129, 0.35)',
+        keyframes: [
+          { time: 0.0, value: 0, inHandle: { dt: -0.4, dv: 0 }, outHandle: { dt: 0.4, dv: 0 }, interpolation: 'bezier' }
+        ]
+      }
+    }
   }
 };
 
@@ -368,6 +434,9 @@ function getProject() {
   if (!project.references.characters) project.references.characters = [];
   if (!project.references.props) project.references.props = [];
   if (!project.references.places) project.references.places = [];
+  if (!project.colorGrading) {
+    project.colorGrading = defaultProject.colorGrading;
+  }
   return project;
 }
 
@@ -393,8 +462,28 @@ app.get('/api/project', (req, res) => {
 
 app.post('/api/project', (req, res) => {
   try {
-    saveProject(req.body);
-    res.json({ success: true, project: req.body });
+    const current = getProject();
+    const updated = {
+      ...current,
+      ...req.body
+    };
+    if (req.body.colorGrading) {
+      updated.colorGrading = req.body.colorGrading;
+    }
+    saveProject(updated);
+    res.json({ success: true, project: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Dedicated Color Grading Curve State API
+app.post('/api/color-grading', (req, res) => {
+  try {
+    const project = getProject();
+    project.colorGrading = req.body;
+    saveProject(project);
+    res.json({ success: true, colorGrading: project.colorGrading });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3679,11 +3768,14 @@ app.delete('/api/storyboard/:shotId/audio/:filename', (req, res) => {
 // Export Timeline with local FFmpeg (including Transitions)
 app.post('/api/export-video', async (req, res) => {
   try {
-    const { timelineClips, transitions = [], projectName, targetResolution = '1280x720', backgroundAudio } = req.body;
+    const { timelineClips, transitions = [], projectName, targetResolution = '1280x720', backgroundAudio, colorGrading } = req.body;
 
     if (!timelineClips || timelineClips.length === 0) {
       return res.status(400).json({ error: 'No clips on timeline to export' });
     }
+
+    const currentProject = getProject();
+    const effectiveColorGrading = colorGrading || currentProject?.colorGrading || null;
 
     const resolveItemPath = (c) => {
       let resolvedPath = c.filePath;
@@ -3738,7 +3830,8 @@ app.post('/api/export-video', async (req, res) => {
       transitions,
       outputPath,
       targetResolution,
-      audioPath: backgroundAudio || null
+      audioPath: backgroundAudio || null,
+      colorGrading: effectiveColorGrading
     });
 
     const totalDuration = await getVideoDuration(outputPath);
@@ -3750,7 +3843,8 @@ app.post('/api/export-video', async (req, res) => {
       url: `/storage/exports/${exportFilename}`,
       duration: totalDuration,
       createdAt: new Date().toISOString(),
-      clipCount: visualClips.length
+      clipCount: visualClips.length,
+      colorGradingApplied: Boolean(effectiveColorGrading && effectiveColorGrading.enabled !== false)
     };
 
     const project = getProject();

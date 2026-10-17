@@ -1375,6 +1375,27 @@ class StudioApp {
       const project = await projRes.json();
       this.project = project;
 
+      // Color Grading Graph state synchronization and rehydration
+      if (this.project.colorGrading && this.project.colorGrading.channels) {
+        this.colorGrading = this.project.colorGrading;
+      } else {
+        this.project.colorGrading = this.colorGrading || this.getDefaultColorGrading();
+        this.colorGrading = this.project.colorGrading;
+      }
+
+      if (this.cgStatusBadge) {
+        this.cgStatusBadge.textContent = this.colorGrading.enabled ? 'Live' : 'Bypassed';
+        this.cgStatusBadge.className = this.colorGrading.enabled ? 'cg-status-badge active' : 'cg-status-badge bypassed';
+      }
+      if (this.btnToggleCgVis) {
+        this.btnToggleCgVis.classList.toggle('active', this.colorGrading.enabled);
+        this.btnToggleCgVis.textContent = this.colorGrading.enabled ? '👁️' : '🚫';
+        this.btnToggleCgVis.title = this.colorGrading.enabled ? 'Live Color Grading Active (Click to bypass)' : 'Color Grading Bypassed (Click to enable)';
+      }
+      if (this.cgChannelSelect && this.colorGrading.activeChannel) {
+        this.cgChannelSelect.value = this.colorGrading.activeChannel;
+      }
+
       // Populate UI
       this.projectTitleInput.value = this.project.name || 'Cinematic Storyboard Project';
       
@@ -1450,6 +1471,10 @@ class StudioApp {
       this.renderStoryboard();
       this.renderMediaPool();
       this.renderTimeline();
+
+      // Render color grading graph and apply baseline look
+      this.renderColorGradeGraph();
+      this.applyColorGrading(0);
 
       if (this.project.timeline && this.project.timeline.length > 0) {
         const visualClips = this.getVisualTimelineClips();
@@ -1707,7 +1732,7 @@ class StudioApp {
   async handleSingleClickShutdown() {
     if (this.btnAppShutdown) {
       this.btnAppShutdown.disabled = true;
-      this.btnAppShutdown.innerHTML = `<span class="btn-spinner"></span> <span>Shutting down...</span>`;
+      this.btnAppShutdown.innerHTML = `<span class="btn-spinner"></span> <span>Saving & Shutting down...</span>`;
     }
 
     if (this.shutdownOverlay) {
@@ -1715,6 +1740,9 @@ class StudioApp {
     }
 
     try {
+      // Ensure all project and color grading changes are committed to disk before terminating server
+      await this.saveProject();
+
       await fetch('/api/shutdown', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -1730,6 +1758,9 @@ class StudioApp {
 
   async saveProject() {
     try {
+      if (this.colorGrading) {
+        this.project.colorGrading = this.colorGrading;
+      }
       await fetch('/api/project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1737,6 +1768,21 @@ class StudioApp {
       });
     } catch (err) {
       console.error('Error saving project:', err);
+    }
+  }
+
+  async saveColorGrading() {
+    try {
+      if (this.colorGrading) {
+        this.project.colorGrading = this.colorGrading;
+        await fetch('/api/color-grading', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.colorGrading)
+        });
+      }
+    } catch (err) {
+      console.warn('Could not persist color grading:', err);
     }
   }
 
@@ -5515,6 +5561,15 @@ class StudioApp {
 
     // Canvas Mouse & Interaction Setup
     this.setupColorGradingCanvasInteractions();
+
+    // Flush project & color grading changes if user closes or reloads page
+    window.addEventListener('beforeunload', () => {
+      if (this.colorGrading && this.project) {
+        this.project.colorGrading = this.colorGrading;
+        const blob = new Blob([JSON.stringify(this.project)], { type: 'application/json' });
+        navigator.sendBeacon('/api/project', blob);
+      }
+    });
   }
 
   evaluateChannelCurve(channelKey, time) {
@@ -7233,7 +7288,8 @@ class StudioApp {
           timelineClips: tl,
           transitions: this.project.timelineTransitions || [],
           projectName: this.project.name,
-          targetResolution: this.exportResSelect.value
+          targetResolution: this.exportResSelect.value,
+          colorGrading: this.colorGrading || this.project.colorGrading || null
         })
       });
       const data = await res.json();

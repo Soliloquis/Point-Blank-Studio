@@ -76,7 +76,29 @@ Point Blank Studio is organized into an intuitive four-stage linear production p
   - Time-anchored canvas audio waveforms that scale dynamically with timeline zoom levels while preserving audio sample alignment.
   - Visual Sequence End markers indicating when audio stems extend beyond the primary edit.
   - Multi-band audio mixer with volume sliders, mute/solo controls, and stereo panning.
-- **Master Video Export (FFmpeg)**: Conforms resolutions (1080p, 720p, or 9:16 vertical), normalizes frame rates and stereo audio, and executes native FFmpeg `xfade` filter graphs for seamless master MP4 rendering.
+- **🎛️ NLE Color Grading Graph & Per-Frame Bezier Curve Engine**:
+  - **Multi-Channel Curve Manipulation**: Interactive cubic bezier curve editing across 5 calibrated color channels:
+    - **Exposure ($EV$)**: Linear exposure adjustment with real-time numeric EV readout.
+    - **Contrast**: Dynamic tonal contrast curve expansion and softening.
+    - **Saturation**: Color intensity scaling from monochrome to vibrant saturation.
+    - **Temperature ($K$)**: Warm amber sunset glow vs. cool tungsten blue shifts.
+    - **Tint**: Emerald green vs. cinematic magenta balancing.
+  - **Interactive Bezier Canvas**:
+    - Double-click anywhere on the graph to insert or snap keyframes directly to the timeline playhead.
+    - Drag keyframe points with live value display and bounding clamp limits.
+    - Symmetric or broken tangent handles (`Shift` key) for precise control over cubic easing curves and smooth transitions.
+    - Quick navigation buttons to jump to previous/next keyframes or delete selected keyframes.
+  - **Cinematic Color Grading Presets**: Instant one-click curated look presets:
+    - `Cinematic Golden Hour`: Warm highlight bloom, boosted exposure, and rich amber tones.
+    - `Teal & Orange / Cyberpunk`: High-contrast teal shadows with saturated warm highlights.
+    - `Bleach Bypass / Gritty War`: Punchy crushed contrast, desaturated palette, and dark gritty undertones.
+    - `Sunset Twilight Fade`: Deep magenta-purple atmospheric evening gradients.
+    - `Neutral Flat Baseline`: Instant reset to un-graded baseline source footage.
+  - **Synchronized Live Cinema Monitor**: Real-time evaluation during timeline playback and scrubbing driven by SVG `<feColorMatrix>` color transformation matrix and CSS filter pipelines.
+  - **Full Disk Persistence**: Curves and channel keyframes automatically commit to `current_project.json` and persist across studio sessions, tab reloads, and system restarts.
+- **Master Video Export (FFmpeg with Color Grade Conformance)**:
+  - Automatically evaluates cubic bezier curves per clip or slices animated curves into sub-second intervals using native FFmpeg timeline filters (`exposure`, `eq`, `colorchannelmixer`).
+  - Conforms target resolutions (1080p, 720p, or 9:16 vertical), normalizes frame rates and stereo audio, applies color grading passes, and renders seamless master MP4 files with `xfade` transitions.
 
 ---
 
@@ -101,6 +123,19 @@ Point Blank Studio is organized into an intuitive four-stage linear production p
 | :--- | :--- |
 | Jump to Category | Click category tab in sticky top bar |
 | Tag Asset in Shot | Type `@` in shot description textarea for autocomplete |
+
+### Color Grading Graph
+| Action | Shortcut / Interaction |
+| :--- | :--- |
+| `Double Click Canvas` | Add or update keyframe at playhead timestamp |
+| `Drag Keyframe Point` | Reposition keyframe time and value |
+| `Drag Tangent Handle` | Adjust cubic bezier entry/exit curvature slope |
+| `Shift + Drag Handle` | Broken tangent mode for independent asymmetric control |
+| `Click Keyframe` | Select keyframe and expose bezier tangent handles |
+| `👁️ / 🚫` | Toggle live color grade on / bypass |
+| `+Key / -Key` | Add keyframe at playhead or delete selected keyframe |
+| `Prev / Next` | Jump playhead between keyframe markers |
+| `Presets` | Cycle cinematic color grade presets |
 
 ---
 
